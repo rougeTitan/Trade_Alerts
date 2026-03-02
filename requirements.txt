@@ -1,0 +1,6 @@
+yfinance>=0.2.31
+openpyxl>=3.1.2
+pytz>=2023.3
+schedule>=1.2.1
+twilio>=8.10.0
+requests>=2.31.0

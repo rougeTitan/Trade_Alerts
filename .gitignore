@@ -1,0 +1,25 @@
+# Credentials & config with secrets
+config.json
+
+# Generated files
+watchlist.xlsx
+alert_log.csv
+trade-alerts-deploy.zip
+watchlist_SAMPLE.xlsx
+check_watchlist.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# Logs
+*.log
+monitor.log
+monitor_error.log
+
+# OS
+Thumbs.db
+.DS_Store

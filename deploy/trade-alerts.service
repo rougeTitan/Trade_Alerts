@@ -1,0 +1,19 @@
+[Unit]
+Description=Trade Alerts - Stock Price Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/trade-alerts
+ExecStart=/home/ec2-user/trade-alerts/venv/bin/python /home/ec2-user/trade-alerts/main.py monitor
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ec2-user/trade-alerts/monitor.log
+StandardError=append:/home/ec2-user/trade-alerts/monitor_error.log
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
