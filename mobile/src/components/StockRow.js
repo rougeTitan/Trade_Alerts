@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   headerLeft: { gap: 1, flex: 1 },
   ticker: { fontSize: 14, fontWeight: '800' },
   sector: { fontSize: 10, fontWeight: '500' },
-  price: { fontSize: 14, fontWeight: '700', fontFamily: 'monospace' },
+  price: { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
   targetsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

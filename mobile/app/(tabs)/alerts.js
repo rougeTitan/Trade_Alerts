@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
-  alertPrice: { fontSize: 15, fontWeight: '700', fontFamily: 'monospace' },
+  alertPrice: { fontSize: 15, fontWeight: '700' },
   alertDirection: { fontSize: 13, fontWeight: '700' },
   alertTarget: { fontSize: 13 },
   alertSector: { fontSize: 11, marginTop: 2 },
