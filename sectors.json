@@ -1,13 +1,111 @@
 {
-    "Communication": ["NFLX", "META", "GOOGL", "TMUS", "DIS"],
-    "Consumer Discretionary": ["AMZN", "TSLA", "HD", "LOW", "MCD", "NKE", "BKNG", "SBUX"],
-    "Energy": ["XOM", "CVX"],
-    "Financials": ["V", "BRK-B", "MA", "JPM", "BLK", "AXP", "COF", "SOFI"],
-    "HealthCare": ["LLY", "JNJ", "UNH", "ABBV", "TMO", "DHR"],
-    "Industrials": ["DE", "CAT", "LMT", "UPS", "FDX", "ADP", "RTX", "WM"],
-    "Information Technology": ["AAPL", "ACN", "ADBE", "AMD", "AVGO", "CRM", "CRWD", "INTC", "INTU", "KLAC", "MSFT", "MSI", "MU", "NVDA", "ORCL", "QCOM", "TXN"],
-    "Consumer Staples": ["COST", "PG", "PEP", "TGT", "DLTR", "WMT"],
-    "ETF": ["VYM", "VTV", "VIG", "VONE", "VBK", "VUG", "VOO", "QQQ", "SPY", "IWM"],
-    "Mutual Funds": ["FNILX", "FSSNX", "FSMDX", "FXAIX", "FIPFX", "SWLVX", "SWMCX", "SWPPX", "SWYMX"],
-    "Tier 1 Stocks": ["CMG", "CVS", "KO", "MSTR", "PLTR", "SHOP", "SNOW", "TSM"]
+    "Communication": [
+        "NFLX",
+        "META",
+        "TMUS",
+        "DIS",
+        "DLR"
+    ],
+    "Consumer Discretionary": [
+        "AMZN",
+        "TSLA",
+        "HD",
+        "LOW",
+        "MCD",
+        "NKE",
+        "BKNG",
+        "SBUX"
+    ],
+    "Energy": [
+        "XOM",
+        "CVX"
+    ],
+    "Financials": [
+        "V",
+        "BRK-B",
+        "MA",
+        "JPM",
+        "BLK",
+        "AXP",
+        "COF",
+        "SOFI"
+    ],
+    "HealthCare": [
+        "LLY",
+        "JNJ",
+        "UNH",
+        "ABBV",
+        "TMO",
+        "DHR"
+    ],
+    "Industrials": [
+        "DE",
+        "CAT",
+        "LMT",
+        "UPS",
+        "FDX",
+        "ADP",
+        "RTX",
+        "WM"
+    ],
+    "Information Technology": [
+        "AAPL",
+        "ACN",
+        "ADBE",
+        "AMD",
+        "AVGO",
+        "CRM",
+        "CRWD",
+        "INTC",
+        "INTU",
+        "KLAC",
+        "MSFT",
+        "MSI",
+        "MU",
+        "NVDA",
+        "ORCL",
+        "QCOM",
+        "TXN"
+    ],
+    "Consumer Staples": [
+        "COST",
+        "PG",
+        "PEP",
+        "TGT",
+        "DLTR",
+        "WMT"
+    ],
+    "ETF": [
+        "VYM",
+        "VTV",
+        "VIG",
+        "VONE",
+        "VBK",
+        "VUG",
+        "VOO",
+        "QQQ",
+        "SPY",
+        "IWM"
+    ],
+    "Mutual Funds": [
+        "FNILX",
+        "FSSNX",
+        "FSMDX",
+        "FXAIX",
+        "FIPFX",
+        "SWLVX",
+        "SWMCX",
+        "SWPPX",
+        "SWYMX"
+    ],
+    "Tier 1 Stocks": [
+        "CMG",
+        "CVS",
+        "KO",
+        "MSTR",
+        "PLTR",
+        "SHOP",
+        "SNOW",
+        "TSM"
+    ]
 }

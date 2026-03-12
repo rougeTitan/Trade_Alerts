@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trade Alerts Dashboard</title>
+<style>
+/* ====== RESET & BASE ====== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#242834;--border:#2e3345;
+  --text:#e1e4eb;--text2:#8b90a0;--accent:#4f8ff7;--accent2:#3a6fd8;
+  --green:#22c55e;--red:#ef4444;--yellow:#eab308;--orange:#f97316;
+}
+html{font-size:14px}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;font-family:inherit;font-size:.875rem}
+
+/* ====== LAYOUT ====== */
+.app{display:flex;height:100vh}
+.sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.content{flex:1;overflow-y:auto;padding:20px 24px}
+
+/* ====== SIDEBAR ====== */
+.logo{padding:16px 18px;font-size:1.1rem;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.logo span{font-size:1.3rem}
+.sector-list{flex:1;overflow-y:auto;padding:8px 0}
+.sector-item{padding:10px 18px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:.15s;border-left:3px solid transparent;color:var(--text2)}
+.sector-item:hover{background:var(--surface2);color:var(--text)}
+.sector-item.active{background:var(--surface2);color:var(--accent);border-left-color:var(--accent);font-weight:600}
+.sector-item .count{background:var(--surface2);border-radius:10px;padding:2px 8px;font-size:.75rem;color:var(--text2)}
+.sector-item.active .count{background:var(--accent);color:#fff}
+.sidebar-footer{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:6px}
+.sidebar-footer button{flex:1}
+
+/* ====== TOPBAR ====== */
+.topbar h2{font-size:1.15rem;font-weight:600}
+.topbar-actions{display:flex;gap:8px;align-items:center}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.status-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.status-dot.off{background:var(--red)}
+.status-label{font-size:.8rem;color:var(--text2);margin-right:8px}
+
+/* ====== BUTTONS ====== */
+.btn{padding:7px 16px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);transition:.15s}
+.btn:hover{background:var(--border)}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent2)}
+.btn-danger{background:transparent;color:var(--red);border-color:var(--red)}
+.btn-danger:hover{background:var(--red);color:#fff}
+.btn-sm{padding:4px 10px;font-size:.8rem}
+.btn-icon{padding:4px 8px;background:transparent;border:none;color:var(--text2);font-size:1rem}
+.btn-icon:hover{color:var(--text)}
+
+/* ====== TABLE ====== */
+.stock-table{width:100%;border-collapse:collapse}
+.stock-table th{text-align:left;padding:10px 12px;color:var(--text2);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:1}
+.stock-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.stock-table tr:hover td{background:var(--surface)}
+.ticker{font-weight:700;font-size:1rem;color:var(--accent)}
+.price{font-weight:600;font-family:'Cascadia Code','Fira Code',monospace}
+.target-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:14px;font-size:.8rem;font-weight:600;margin:2px 3px}
+.target-pill.above{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.target-pill.below{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.target-pill.both{background:rgba(234,179,8,.12);color:var(--yellow);border:1px solid rgba(234,179,8,.3)}
+.no-targets{color:var(--text2);font-style:italic;font-size:.85rem}
+.edit-btn{opacity:0;transition:.15s}
+tr:hover .edit-btn{opacity:1}
+
+/* ====== MODAL ====== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:.2s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.modal h3{margin-bottom:16px;font-size:1.1rem}
+.modal-row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.modal-row label{width:70px;font-size:.85rem;color:var(--text2);flex-shrink:0}
+.modal-row input,.modal-row select{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:.9rem}
+.modal-row input:focus,.modal-row select:focus{outline:none;border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.target-group{border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--bg)}
+.target-group-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.target-group-header span{font-weight:600;font-size:.9rem;color:var(--text2)}
+
+/* ====== ALERTS LOG ====== */
+.alert-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);transition:.15s}
+.alert-row:hover{background:var(--surface)}
+.alert-time{font-size:.8rem;color:var(--text2);min-width:150px}
+.alert-ticker{font-weight:700;color:var(--accent);min-width:60px}
+.alert-detail{font-size:.9rem}
+.alert-direction{font-weight:600}
+.alert-direction.above{color:var(--green)}
+.alert-direction.below{color:var(--red)}
+
+/* ====== TABS ====== */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px}
+.tab{padding:8px 20px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-2px;transition:.15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* ====== EMPTY STATE ====== */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text2)}
+.empty-state h3{font-size:1.2rem;margin-bottom:8px;color:var(--text)}
+.empty-state p{margin-bottom:16px}
+
+/* ====== TOAST ====== */
+.toast-container{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 20px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.9rem;animation:toastIn .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.toast.success{border-color:var(--green);color:var(--green)}
+.toast.error{border-color:var(--red);color:var(--red)}
+@keyframes toastIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* ====== LOADING ====== */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ====== MISC ====== */
+.flex{display:flex}.gap-8{gap:8px}.items-center{align-items:center}
+.summary-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card-label{font-size:.8rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.card-value{font-size:1.6rem;font-weight:700}
+.card-value.green{color:var(--green)}.card-value.red{color:var(--red)}.card-value.accent{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo"><span>📈</span> Trade Alerts</div>
+    <div class="sector-list" id="sectorList">
+      <div class="sector-item active" data-sector="__all__" onclick="selectSector('__all__')">
+        All Stocks <span class="count" id="allCount">0</span>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn btn-sm" onclick="openAddSectorModal()">+ Sector</button>
+      <button class="btn btn-sm btn-primary" onclick="openAddStockModal()">+ Stock</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <h2 id="pageTitle">Dashboard</h2>
+      <div class="topbar-actions">
+        <span class="status-dot off" id="monitorDot"></span>
+        <span class="status-label" id="monitorLabel">Monitor Off</span>
+        <button class="btn btn-sm" id="monitorBtn" onclick="toggleMonitor()">Start Monitor</button>
+        <button class="btn btn-sm" onclick="checkOnce()">Check Now</button>
+        <button class="btn btn-sm" onclick="refreshPrices()">⟳ Refresh Prices</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="stocks" onclick="switchTab('stocks')">Stocks & Targets</div>
+        <div class="tab" data-tab="alerts" onclick="switchTab('alerts')">Alert History</div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="summary-cards" id="summaryCards">
+        <div class="card"><div class="card-label">Total Stocks</div><div class="card-value accent" id="totalStocks">0</div></div>
+        <div class="card"><div class="card-label">With Targets</div><div class="card-value green" id="withTargets">0</div></div>
+        <div class="card"><div class="card-label">No Targets</div><div class="card-value red" id="noTargets">0</div></div>
+        <div class="card"><div class="card-label">Sectors</div><div class="card-value accent" id="totalSectors">0</div></div>
+      </div>
+
+      <!-- STOCKS TAB -->
+      <div class="tab-panel active" id="tab-stocks">
+        <table class="stock-table">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Current Price</th>
+              <th>Target 1</th>
+              <th>Target 2</th>
+              <th>Target 3</th>
+              <th>Sector</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="stockTableBody">
+            <tr><td colspan="7" class="empty-state"><div class="spinner"></div> Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ALERTS TAB -->
+      <div class="tab-panel" id="tab-alerts">
+        <div id="alertsList">
+          <div class="empty-state"><p>Loading alerts…</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT TARGETS MODAL -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3 id="editModalTitle">Edit Targets — AAPL</h3>
+    <div id="editModalBody">
+      <div class="target-group" id="tg1">
+        <div class="target-group-header"><span>Target 1</span></div>
+        <div class="modal-row"><label>Price</label><input type="number" step="0.01" id="t1price" placeholder="e.g. 150.00"></div>
+        <div class="modal-row"><label>Direction</label><select id="t1dir"><option value="ABOVE">ABOVE ↑</option><option value="BELOW">BELOW ↓</option><option value="BOTH">BOTH ↕</option></select></div>
+      </div>
+      <div class="target-group" id="tg2">
+        <div class="target-group-header"><span>Target 2</span></div>
+        <div class="modal-row"><label>Price</label><input type="number" step="0.01" id="t2price" placeholder="e.g. 140.00"></div>
+        <div class="modal-row"><label>Direction</label><select id="t2dir"><option value="ABOVE">ABOVE ↑</option><option value="BELOW">BELOW ↓</option><option value="BOTH">BOTH ↕</option></select></div>
+      </div>
+      <div class="target-group" id="tg3">
+        <div class="target-group-header"><span>Target 3</span></div>
+        <div class="modal-row"><label>Price</label><input type="number" step="0.01" id="t3price" placeholder="e.g. 160.00"></div>
+        <div class="modal-row"><label>Direction</label><select id="t3dir"><option value="ABOVE">ABOVE ↑</option><option value="BELOW">BELOW ↓</option><option value="BOTH">BOTH ↕</option></select></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="clearTargets()">Clear All</button>
+      <button class="btn btn-primary" onclick="saveTargets()">Save Targets</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD STOCK MODAL -->
+<div class="modal-overlay" id="addStockModal">
+  <div class="modal">
+    <h3>Add Stock</h3>
+    <div class="modal-row"><label>Sector</label><select id="addStockSector"></select></div>
+    <div class="modal-row"><label>Ticker</label><input type="text" id="addStockTicker" placeholder="e.g. AAPL" style="text-transform:uppercase"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('addStockModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addStock()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD SECTOR MODAL -->
+<div class="modal-overlay" id="addSectorModal">
+  <div class="modal">
+    <h3>Add Sector</h3>
+    <div class="modal-row"><label>Name</label><input type="text" id="addSectorName" placeholder="e.g. Real Estate"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('addSectorModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addSector()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+/* ========== STATE ========== */
+let watchlistData = {};   // sector -> [{ticker, current_price, targets}]
+let activeSector = '__all__';
+let editingTicker = null;
+let editingSector = null;
+
+/* ========== INIT ========== */
+document.addEventListener('DOMContentLoaded', () => {
+  loadWatchlist();
+  loadAlerts();
+  checkMonitorStatus();
+});
+
+/* ========== API HELPERS ========== */
+async function api(url, opts = {}) {
+  const res = await fetch(url, opts);
+  return res.json();
+}
+function postJson(url, body) {
+  return api(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+}
+function deleteJson(url, body) {
+  return api(url, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+}
+
+/* ========== TOAST ========== */
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* ========== LOAD DATA ========== */
+async function loadWatchlist() {
+  watchlistData = await api('/api/watchlist');
+  renderSidebar();
+  renderTable();
+  updateSummary();
+}
+
+async function loadAlerts() {
+  const alerts = await api('/api/alerts');
+  renderAlerts(alerts);
+}
+
+async function checkMonitorStatus() {
+  const s = await api('/api/monitor/status');
+  updateMonitorUI(s.running);
+}
+
+/* ========== RENDER SIDEBAR ========== */
+function renderSidebar() {
+  const list = document.getElementById('sectorList');
+  let total = 0;
+  let html = '';
+
+  const sectors = Object.keys(watchlistData);
+  for (const s of sectors) total += watchlistData[s].length;
+
+  html += `<div class="sector-item ${activeSector==='__all__'?'active':''}" data-sector="__all__" onclick="selectSector('__all__')">
+    All Stocks <span class="count">${total}</span>
+  </div>`;
+  for (const s of sectors) {
+    html += `<div class="sector-item ${activeSector===s?'active':''}" data-sector="${s}" onclick="selectSector('${s.replace(/'/g,"\\'")}')">
+      ${s} <span class="count">${watchlistData[s].length}</span>
+    </div>`;
+  }
+  list.innerHTML = html;
+  document.getElementById('allCount')?.remove();
+}
+
+/* ========== RENDER TABLE ========== */
+function renderTable() {
+  const tbody = document.getElementById('stockTableBody');
+  let rows = [];
+
+  const sectors = activeSector === '__all__' ? Object.keys(watchlistData) : [activeSector];
+  for (const sector of sectors) {
+    const stocks = watchlistData[sector] || [];
+    for (const s of stocks) {
+      rows.push({ ...s, sector });
+    }
+  }
+
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><h3>No stocks found</h3><p>Add stocks using the + Stock button.</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const priceStr = r.current_price != null ? `$${r.current_price.toFixed(2)}` : '—';
+    const targetHtml = (idx) => {
+      const t = (r.targets || [])[idx];
+      if (!t) return '<span class="no-targets">—</span>';
+      const cls = t.direction.toLowerCase();
+      const arrow = t.direction === 'ABOVE' ? '↑' : t.direction === 'BELOW' ? '↓' : '↕';
+      return `<span class="target-pill ${cls}">$${t.price.toFixed(2)} ${arrow}</span>`;
+    };
+    return `<tr>
+      <td class="ticker">${r.ticker}</td>
+      <td class="price">${priceStr}</td>
+      <td>${targetHtml(0)}</td>
+      <td>${targetHtml(1)}</td>
+      <td>${targetHtml(2)}</td>
+      <td style="color:var(--text2);font-size:.85rem">${r.sector}</td>
+      <td>
+        <button class="btn btn-sm edit-btn" onclick="openEditModal('${r.ticker}','${r.sector.replace(/'/g,"\\'")}')">Edit</button>
+        <button class="btn-icon edit-btn" title="Remove stock" onclick="removeStock('${r.ticker}','${r.sector.replace(/'/g,"\\'")}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ========== SUMMARY ========== */
+function updateSummary() {
+  let total = 0, withT = 0, noT = 0;
+  for (const sector of Object.keys(watchlistData)) {
+    for (const s of watchlistData[sector]) {
+      total++;
+      if (s.targets && s.targets.length > 0) withT++; else noT++;
+    }
+  }
+  document.getElementById('totalStocks').textContent = total;
+  document.getElementById('withTargets').textContent = withT;
+  document.getElementById('noTargets').textContent = noT;
+  document.getElementById('totalSectors').textContent = Object.keys(watchlistData).length;
+}
+
+/* ========== ALERTS ========== */
+function renderAlerts(alerts) {
+  const el = document.getElementById('alertsList');
+  if (!alerts || alerts.length === 0) {
+    el.innerHTML = `<div class="empty-state"><h3>No alerts yet</h3><p>Alerts will appear here when price targets are breached.</p></div>`;
+    return;
+  }
+  el.innerHTML = alerts.map(a => {
+    const dirClass = (a.direction || '').toLowerCase().includes('below') ? 'below' : 'above';
+    return `<div class="alert-row">
+      <span class="alert-time">${a.timestamp || ''}</span>
+      <span class="alert-ticker">${a.ticker || ''}</span>
+      <span class="alert-detail">
+        $${parseFloat(a.current_price || 0).toFixed(2)}
+        <span class="alert-direction ${dirClass}">${a.direction || ''}</span>
+        target $${parseFloat(a.target_price || 0).toFixed(2)}
+      </span>
+      <span style="color:var(--text2);font-size:.85rem;margin-left:auto">${a.sector || ''}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ========== SECTOR SELECT ========== */
+function selectSector(s) {
+  activeSector = s;
+  document.getElementById('pageTitle').textContent = s === '__all__' ? 'All Stocks' : s;
+  renderSidebar();
+  renderTable();
+}
+
+/* ========== TABS ========== */
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
+  if (tab === 'alerts') loadAlerts();
+}
+
+/* ========== EDIT MODAL ========== */
+function openEditModal(ticker, sector) {
+  editingTicker = ticker;
+  editingSector = sector;
+  document.getElementById('editModalTitle').textContent = `Edit Targets — ${ticker}`;
+
+  // Find current targets
+  const stocks = watchlistData[sector] || [];
+  const stock = stocks.find(s => s.ticker === ticker);
+  const targets = stock?.targets || [];
+
+  for (let i = 1; i <= 3; i++) {
+    const t = targets[i - 1];
+    document.getElementById(`t${i}price`).value = t ? t.price : '';
+    document.getElementById(`t${i}dir`).value = t ? t.direction : 'ABOVE';
+  }
+
+  document.getElementById('editModal').classList.add('open');
+}
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingTicker = null;
+  editingSector = null;
+}
+
+async function saveTargets() {
+  const targets = [];
+  for (let i = 1; i <= 3; i++) {
+    const p = document.getElementById(`t${i}price`).value;
+    const d = document.getElementById(`t${i}dir`).value;
+    if (p && parseFloat(p) > 0) targets.push({ price: parseFloat(p), direction: d });
+  }
+  await postJson('/api/targets', { ticker: editingTicker, sector: editingSector, targets });
+  toast(`Targets saved for ${editingTicker}`);
+  closeEditModal();
+  loadWatchlist();
+}
+
+function clearTargets() {
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById(`t${i}price`).value = '';
+    document.getElementById(`t${i}dir`).value = 'ABOVE';
+  }
+}
+
+/* ========== ADD STOCK / SECTOR ========== */
+function openAddStockModal() {
+  const sel = document.getElementById('addStockSector');
+  sel.innerHTML = Object.keys(watchlistData).map(s => `<option value="${s}">${s}</option>`).join('');
+  document.getElementById('addStockTicker').value = '';
+  document.getElementById('addStockModal').classList.add('open');
+}
+async function addStock() {
+  const sector = document.getElementById('addStockSector').value;
+  const ticker = document.getElementById('addStockTicker').value.trim().toUpperCase();
+  if (!ticker) return toast('Enter a ticker symbol', 'error');
+  const res = await postJson('/api/sectors/stock', { sector, ticker });
+  if (res.error) return toast(res.error, 'error');
+  toast(`Added ${ticker} to ${sector}`);
+  closeModal('addStockModal');
+  loadWatchlist();
+}
+function openAddSectorModal() {
+  document.getElementById('addSectorName').value = '';
+  document.getElementById('addSectorModal').classList.add('open');
+}
+async function addSector() {
+  const name = document.getElementById('addSectorName').value.trim();
+  if (!name) return toast('Enter a sector name', 'error');
+  const res = await postJson('/api/sectors/add', { sector: name });
+  if (res.error) return toast(res.error, 'error');
+  toast(`Sector "${name}" added`);
+  closeModal('addSectorModal');
+  loadWatchlist();
+}
+async function removeStock(ticker, sector) {
+  if (!confirm(`Remove ${ticker} from ${sector}?`)) return;
+  await deleteJson('/api/sectors/stock', { sector, ticker });
+  toast(`Removed ${ticker}`);
+  loadWatchlist();
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close modals on overlay click
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
+});
+
+/* ========== MONITOR ========== */
+function updateMonitorUI(running) {
+  const dot = document.getElementById('monitorDot');
+  const label = document.getElementById('monitorLabel');
+  const btn = document.getElementById('monitorBtn');
+  dot.className = `status-dot ${running ? 'on' : 'off'}`;
+  label.textContent = running ? 'Monitor Running' : 'Monitor Off';
+  btn.textContent = running ? 'Stop Monitor' : 'Start Monitor';
+  btn.className = running ? 'btn btn-sm btn-danger' : 'btn btn-sm btn-primary';
+}
+async function toggleMonitor() {
+  const s = await api('/api/monitor/status');
+  if (s.running) {
+    await postJson('/api/monitor/stop', {});
+    toast('Monitor stopped');
+    updateMonitorUI(false);
+  } else {
+    await postJson('/api/monitor/start', {});
+    toast('Monitor started');
+    updateMonitorUI(true);
+  }
+}
+
+async function checkOnce() {
+  toast('Running price check…');
+  const res = await postJson('/api/check-once', {});
+  if (res.count > 0) {
+    toast(`${res.count} alert(s) triggered!`, 'success');
+    loadAlerts();
+  } else {
+    toast('No alerts triggered');
+  }
+  loadWatchlist();
+}
+
+async function refreshPrices() {
+  toast('Fetching live prices…');
+  await api('/api/prices/refresh');
+  toast('Prices updated');
+  loadWatchlist();
+}
+
+/* ========== KEYBOARD ========== */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+  }
+});
+</script>
+</body>
+</html>

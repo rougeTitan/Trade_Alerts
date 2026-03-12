@@ -286,3 +286,26 @@ tail -f ~/trade-alerts/monitor.log      # View live logs
 ## 📝 License
 
 This project is for personal use. Feel free to fork and modify.
+
+
+I want to have following things in my stock alerts application
+
+1 - I want to build, support and maintain this entier application to leverage power of cloud computing
+
+2 - I want to use AWS for this application 
+
+3 - application architecture should be scalable to support incoming demand
+
+Application features
+
+1 - application should have login logout feature. when user lands on the home page, user should see the feature page which describs about the features of the appliaction. If he tries to set alert or add any sector or stock into list then application should ask user to create a profile. User should be able to manage their profile like edit profile etc. Each profile should have circuler icon to set profile picture.
+
+2 - can I manage application user (login logout and profile managment) through AWS IAM? i am not sure how to leverage AWS efficinetly.But I want to know more and provide me guidance to impliment it.
+
+3 - application should allow user to chose 2 themes dark and light
+
+4 - each stock row should show a chart preview upon clicking on which it will allow user to see a chart modal. 
+
+5 - can we provide 3 latest news about stock which caused significant movement in that stock?
+
+6 - can this app be converted into android and applie app?

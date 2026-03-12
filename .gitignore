@@ -23,3 +23,7 @@ monitor_error.log
 # OS
 Thumbs.db
 .DS_Store
+nul
+mobile/nul
+.venv/
+mobile/node_modules/
