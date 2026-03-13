@@ -8,7 +8,6 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import api from '../../src/services/api';
@@ -162,17 +161,17 @@ export default function DashboardScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+      <View style={[styles.container, { backgroundColor: c.background }]}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color={c.accent} />
           <Text style={[styles.loadingText, { color: c.textSecondary }]}>Loading watchlist…</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: c.background }]}>
       {/* Top Bar */}
       <View style={[styles.topBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <TouchableOpacity onPress={() => setDrawerOpen(true)} style={styles.menuBtn}>
@@ -296,7 +295,7 @@ export default function DashboardScreen() {
         onAdd={handleAddSector}
         onClose={() => setAddSectorModal(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

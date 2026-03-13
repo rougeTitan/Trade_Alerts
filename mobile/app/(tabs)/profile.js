@@ -8,7 +8,6 @@ import {
   Switch,
   Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -21,12 +20,8 @@ export default function ProfileScreen() {
   const [pushAlerts, setPushAlerts] = useState(false);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: c.background }]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-          <Text style={[styles.headerTitle, { color: c.text }]}>Profile</Text>
-        </View>
 
         {/* Avatar + Name */}
         <View style={styles.avatarSection}>
@@ -130,7 +125,7 @@ export default function ProfileScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
