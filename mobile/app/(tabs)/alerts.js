@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../src/theme/ThemeContext';
 import api from '../../src/services/api';
 
@@ -31,9 +32,12 @@ export default function AlertsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadAlerts();
-  }, [loadAlerts]);
+  // Reload alerts every time the tab gains focus
+  useFocusEffect(
+    useCallback(() => {
+      loadAlerts();
+    }, [loadAlerts])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

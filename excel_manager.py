@@ -204,6 +204,11 @@ def read_watchlist(input_file: str = "watchlist.xlsx") -> list:
                     try:
                         price = float(price_val)
                         direction = str(dir_val).strip().upper() if dir_val else "BOTH"
+                        # Normalize common aliases
+                        if direction in ("DOWN", "D"):
+                            direction = "BELOW"
+                        elif direction in ("UP", "U"):
+                            direction = "ABOVE"
                         if direction not in ("ABOVE", "BELOW", "BOTH"):
                             direction = "BOTH"
                         targets.append({
