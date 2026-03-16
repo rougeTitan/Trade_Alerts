@@ -21,7 +21,19 @@ from notifier import Notifier
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
 CORS(app)
+
+
+@app.after_request
+def add_no_cache_headers(response):
+    """Prevent browser from caching responses — always serve fresh content."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 
 # ---------------------------------------------------------------------------
 # Globals for background monitor thread
