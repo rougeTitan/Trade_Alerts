@@ -234,7 +234,7 @@ export default function DashboardScreen() {
         style={styles.list}
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
       >
         {stocks.length === 0 ? (
           <View style={styles.empty}>
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
   actionBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   actionBtnTextAlt: { fontSize: 12, fontWeight: '600' },
   list: { flex: 1 },
-  listContent: { padding: 16 },
+  listContent: { padding: 8 }, // reduced from 16 to 8 for 3 cards fit
   stockGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

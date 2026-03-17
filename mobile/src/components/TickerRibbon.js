@@ -3,14 +3,14 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import api from '../services/api';
 
-const SCROLL_SPEED = 50; // pixels per second
+const SCROLL_SPEED = 250; // pixels per second
 
 export default function TickerRibbon() {
   const { theme } = useTheme();
   const c = theme.colors;
   const [stocks, setStocks] = useState([]);
-  const [duration, setDuration] = useState(0);
   const innerRef = useRef(null);
+  const [ready, setReady] = useState(false);
 
   const loadPrices = useCallback(async () => {
     try {
@@ -48,6 +48,13 @@ export default function TickerRibbon() {
         100% { transform: translateX(-50%); }
       }
       .ticker-ribbon-inner {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        height: 32px;
+        will-change: transform;
+      }
+      .ticker-ribbon-inner.scrolling {
         animation: ticker-scroll var(--ticker-duration, 60s) linear infinite;
       }
       .ticker-ribbon-inner:hover {
@@ -57,31 +64,68 @@ export default function TickerRibbon() {
     document.head.appendChild(style);
   }, []);
 
-  // Calculate duration based on content width
-  const onLayout = useCallback(() => {
-    if (Platform.OS === 'web' && innerRef.current) {
-      // On web, measure the DOM node directly
-      const el = innerRef.current;
-      // scrollWidth / 2 gives us one set width
-      requestAnimationFrame(() => {
-        const halfWidth = el.scrollWidth / 2;
-        if (halfWidth > 0) {
-          setDuration(halfWidth / SCROLL_SPEED);
-        }
-      });
-    }
-  }, []);
-
+  // Measure and start animation after stocks render
   useEffect(() => {
-    if (stocks.length > 0) {
-      // Small delay to let items render
-      const t = setTimeout(onLayout, 100);
-      return () => clearTimeout(t);
-    }
-  }, [stocks, onLayout]);
+    if (Platform.OS !== 'web' || stocks.length === 0) return;
+    setReady(false);
+    const t = setTimeout(() => {
+      const el = innerRef.current;
+      if (!el) return;
+      el.classList.remove('scrolling');
+      const halfWidth = el.scrollWidth / 2;
+      if (halfWidth > 0) {
+        const dur = halfWidth / SCROLL_SPEED;
+        el.style.setProperty('--ticker-duration', `${dur}s`);
+        // Force reflow before starting animation
+        void el.offsetWidth;
+        el.classList.add('scrolling');
+        setReady(true);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [stocks]);
 
   if (stocks.length === 0) return null;
 
+  // On web, render raw divs/spans so we get real DOM refs
+  if (Platform.OS === 'web') {
+    const itemStyle = {
+      display: 'flex', flexDirection: 'row', alignItems: 'center',
+      paddingLeft: 6, paddingRight: 6, whiteSpace: 'nowrap',
+    };
+    const tickerStyle = {
+      fontSize: 11, fontWeight: '700', color: c.accent, marginRight: 4,
+      fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+    };
+    const priceStyle = {
+      fontSize: 11, fontWeight: '500', color: c.text,
+      fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+    };
+    const dotStyle = { fontSize: 8, color: c.border, marginLeft: 6 };
+
+    const renderWebItems = (keyPrefix) =>
+      stocks.map((s, i) => (
+        <span key={`${keyPrefix}-${s.ticker}-${i}`} style={itemStyle}>
+          <span style={tickerStyle}>{s.ticker}</span>
+          <span style={priceStyle}>${s.price.toFixed(2)}</span>
+          <span style={dotStyle}>•</span>
+        </span>
+      ));
+
+    return (
+      <div style={{
+        height: 32, overflow: 'hidden', borderBottom: `1px solid ${c.border}`,
+        backgroundColor: c.background,
+      }}>
+        <div ref={innerRef} className="ticker-ribbon-inner">
+          {renderWebItems('a')}
+          {renderWebItems('b')}
+        </div>
+      </div>
+    );
+  }
+
+  // Native fallback (no animation)
   const renderItems = (keyPrefix) =>
     stocks.map((s, i) => (
       <View key={`${keyPrefix}-${s.ticker}-${i}`} style={styles.item}>
@@ -93,19 +137,9 @@ export default function TickerRibbon() {
       </View>
     ));
 
-  const webStyle =
-    Platform.OS === 'web' && duration > 0
-      ? { '--ticker-duration': `${duration}s` }
-      : {};
-
   return (
     <View style={[styles.container, { backgroundColor: c.background, borderBottomColor: c.border }]}>
-      <View
-        ref={innerRef}
-        className={Platform.OS === 'web' ? 'ticker-ribbon-inner' : undefined}
-        style={[styles.scrollRow, webStyle]}
-        onLayout={onLayout}
-      >
+      <View style={styles.scrollRow}>
         {renderItems('a')}
         {renderItems('b')}
       </View>

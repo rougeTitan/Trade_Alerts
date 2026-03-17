@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/ThemeContext';
 import TickerRibbon from '../../src/components/TickerRibbon';
+import api from '../../src/services/api';
 
 const NAV_ITEMS = [
   { name: 'dashboard', label: 'Dashboard', icon: 'grid-outline' },
@@ -17,6 +18,11 @@ function TopNavBar({ navigation }) {
   const c = theme.colors;
   const insets = useSafeAreaInsets();
   const state = navigation.getState();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    api.getAlerts().then((alerts) => setAlertCount(alerts.length)).catch(() => {});
+  }, []);
 
   return (
     <View>
@@ -57,6 +63,11 @@ function TopNavBar({ navigation }) {
                 >
                   {item.label}
                 </Text>
+                {item.name === 'alerts' && alertCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{alertCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -113,5 +124,20 @@ const styles = StyleSheet.create({
   navLinkText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  badge: {
+    backgroundColor: '#c00',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

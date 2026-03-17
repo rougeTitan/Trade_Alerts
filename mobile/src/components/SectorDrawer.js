@@ -1,32 +1,78 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Modal,
+  Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.78, 320);
 
 export default function SectorDrawer({ visible, onClose, sectors, activeSector, onSelect }) {
   const { theme } = useTheme();
   const c = theme.colors;
+  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const isShown = useRef(false);
+
+  useEffect(() => {
+    if (visible) {
+      isShown.current = true;
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 260,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 260,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start();
+    } else if (isShown.current) {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -DRAWER_WIDTH,
+          duration: 220,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start();
+    }
+  }, [visible]);
 
   const sectorNames = Object.keys(sectors);
   const totalStocks = sectorNames.reduce((sum, s) => sum + (sectors[s]?.length || 0), 0);
 
+  // Don't render anything if never opened
+  if (!visible && !isShown.current) return null;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <View
-          style={[styles.drawer, { backgroundColor: c.surface }]}
-          onStartShouldSetResponder={() => true}
-        >
+    <View style={styles.fullScreen} pointerEvents={visible ? 'auto' : 'none'}>
+      {/* Overlay */}
+      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+      </Animated.View>
+
+      {/* Drawer */}
+      <Animated.View
+        style={[
+          styles.drawer,
+          { backgroundColor: c.surface, transform: [{ translateX: slideAnim }] },
+        ]}
+      >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: c.border }]}>
             <View style={styles.headerLeft}>
@@ -94,22 +140,32 @@ export default function SectorDrawer({ visible, onClose, sectors, activeSector, 
               );
             })}
           </ScrollView>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
+        </Animated.View>
+      </View>
+    );
 }
 
 const styles = StyleSheet.create({
+  fullScreen: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
+  },
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    flexDirection: 'row',
   },
   drawer: {
-    width: SCREEN_WIDTH * 0.78,
-    maxWidth: 320,
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: DRAWER_WIDTH,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 20,
   },
   header: {
     flexDirection: 'row',
