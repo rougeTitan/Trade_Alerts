@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/ThemeContext';
+import TickerRibbon from '../../src/components/TickerRibbon';
 
 const NAV_ITEMS = [
   { name: 'dashboard', label: 'Dashboard', icon: 'grid-outline' },
@@ -18,47 +19,50 @@ function TopNavBar({ navigation }) {
   const state = navigation.getState();
 
   return (
-    <View
-      style={[
-        styles.navbar,
-        {
-          backgroundColor: c.surface,
-          borderBottomColor: c.border,
-          paddingTop: insets.top + 6,
-        },
-      ]}
-    >
-      <Text style={[styles.brand, { color: c.accent }]}>Trade Alerts</Text>
-      <View style={styles.navLinks}>
-        {NAV_ITEMS.map((item, index) => {
-          const isActive = state.index === index;
-          return (
-            <TouchableOpacity
-              key={item.name}
-              onPress={() => navigation.navigate(item.name)}
-              style={[
-                styles.navLink,
-                isActive && { borderBottomColor: c.accent, borderBottomWidth: 2 },
-              ]}
-            >
-              <Ionicons
-                name={item.icon}
-                size={15}
-                color={isActive ? c.accent : c.textSecondary}
-                style={{ marginRight: 4 }}
-              />
-              <Text
+    <View>
+      <View
+        style={[
+          styles.navbar,
+          {
+            backgroundColor: c.surface,
+            borderBottomColor: c.border,
+            paddingTop: insets.top + 6,
+          },
+        ]}
+      >
+        <Text style={[styles.brand, { color: c.accent }]}>Trade Alerts</Text>
+        <View style={styles.navLinks}>
+          {NAV_ITEMS.map((item, index) => {
+            const isActive = state.index === index;
+            return (
+              <TouchableOpacity
+                key={item.name}
+                onPress={() => navigation.navigate(item.name)}
                 style={[
-                  styles.navLinkText,
-                  { color: isActive ? c.accent : c.textSecondary },
+                  styles.navLink,
+                  isActive && { borderBottomColor: c.accent, borderBottomWidth: 2 },
                 ]}
               >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Ionicons
+                  name={item.icon}
+                  size={15}
+                  color={isActive ? c.accent : c.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.navLinkText,
+                    { color: isActive ? c.accent : c.textSecondary },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
+      <TickerRibbon />
     </View>
   );
 }
