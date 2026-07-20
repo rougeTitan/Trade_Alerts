@@ -3,9 +3,10 @@
 
 import { Platform } from 'react-native';
 
-// Default to localhost; on Android emulator use 10.0.2.2
+// Production: set EXPO_PUBLIC_API_URL (e.g. https://alerts.example.com) at build time.
+// Dev fallback: localhost; Android emulator uses 10.0.2.2.
 const DEFAULT_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const BASE_URL = `http://${DEFAULT_HOST}:5000`;
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${DEFAULT_HOST}:5000`;
 
 class ApiService {
   constructor(baseUrl = BASE_URL) {
@@ -92,6 +93,10 @@ class ApiService {
 
   getAlerts() {
     return this._fetch('/api/alerts');
+  }
+
+  clearAlerts() {
+    return this._fetch('/api/alerts', { method: 'DELETE' });
   }
 
   // ── Monitor ──────────────────────────────────────────

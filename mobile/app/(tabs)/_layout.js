@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -19,10 +19,22 @@ function TopNavBar({ navigation }) {
   const insets = useSafeAreaInsets();
   const state = navigation.getState();
   const [alertCount, setAlertCount] = useState(0);
+  const router = useRouter();
+
+  const fetchAlertCount = () => {
+    api.getAlerts().then((alerts) => setAlertCount(alerts.length)).catch(() => {});
+  };
 
   useEffect(() => {
-    api.getAlerts().then((alerts) => setAlertCount(alerts.length)).catch(() => {});
+    fetchAlertCount();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('state', () => {
+      fetchAlertCount();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   return (
     <View>
@@ -36,7 +48,9 @@ function TopNavBar({ navigation }) {
           },
         ]}
       >
-        <Text style={[styles.brand, { color: c.accent }]}>Trade Alerts</Text>
+        <TouchableOpacity onPress={() => router.push('/')} activeOpacity={0.7}>
+          <Text style={[styles.brand, { color: c.accent }]}>Trade Alerts</Text>
+        </TouchableOpacity>
         <View style={styles.navLinks}>
           {NAV_ITEMS.map((item, index) => {
             const isActive = state.index === index;

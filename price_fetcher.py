@@ -6,6 +6,7 @@ Fetches real-time stock prices using yfinance.
 import yfinance as yf
 from datetime import datetime
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def fetch_prices(tickers: list) -> dict:
@@ -109,6 +110,60 @@ def fetch_company_names(tickers: list) -> dict:
         except Exception:
             names[ticker] = ticker
     return names
+
+
+def _fetch_single_earnings_date(ticker: str) -> tuple:
+    """
+    Fetch earnings date for a single ticker.
+    Returns tuple of (ticker, earnings_date_string_or_None)
+    """
+    try:
+        stock = yf.Ticker(ticker)
+        calendar = stock.calendar
+        if calendar is not None and len(calendar) > 0:
+            earnings_date = calendar.get('Earnings Date')
+            if earnings_date is not None:
+                if isinstance(earnings_date, list) and len(earnings_date) > 0:
+                    return (ticker, str(earnings_date[0]))
+                elif hasattr(earnings_date, 'date'):
+                    return (ticker, str(earnings_date.date()))
+                else:
+                    return (ticker, str(earnings_date) if earnings_date else None)
+        return (ticker, None)
+    except Exception as e:
+        print(f"⚠️  Could not fetch earnings date for {ticker}: {e}")
+        return (ticker, None)
+
+
+def fetch_earnings_dates(tickers: list, max_workers: int = 10) -> dict:
+    """
+    Fetch upcoming earnings dates for a list of tickers in parallel.
+    
+    Args:
+        tickers: list of ticker symbols, e.g. ["AAPL", "MSFT"]
+        max_workers: number of parallel threads (default: 10)
+    
+    Returns:
+        dict: {"AAPL": "2026-04-30", "MSFT": "2026-04-25", ...}
+        Returns None for tickers where earnings date is unavailable.
+    """
+    earnings = {}
+    
+    if not tickers:
+        return earnings
+    
+    # Use ThreadPoolExecutor for parallel fetching
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_ticker = {executor.submit(_fetch_single_earnings_date, ticker): ticker 
+                           for ticker in tickers}
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_ticker):
+            ticker, earnings_date = future.result()
+            earnings[ticker] = earnings_date
+    
+    return earnings
 
 
 if __name__ == "__main__":

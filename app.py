@@ -14,7 +14,7 @@ from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 
 from excel_manager import read_watchlist, update_current_prices, create_watchlist_template
-from price_fetcher import fetch_prices
+from price_fetcher import fetch_prices, fetch_earnings_dates
 from monitor import PriceMonitor
 from notifier import Notifier
 
@@ -175,6 +175,9 @@ def _monitor_loop():
     mon = PriceMonitor()
     notifier = Notifier()
     last_day = None
+    check_count = 0
+
+    print("🔄 Background monitoring started")
 
     while monitor_running:
         now = datetime.now(tz)
@@ -182,13 +185,18 @@ def _monitor_loop():
         if last_day != today:
             mon.reset_alerts()
             last_day = today
+            check_count = 0
 
         try:
-            alerts = mon.check_prices()
+            # Use cached prices for efficiency (prices are updated by user refreshes)
+            # This reduces API calls and improves cloud cost-efficiency
+            alerts = mon.check_prices(use_cached=True)
             if alerts:
+                print(f"🚨 {len(alerts)} alert(s) detected - sending notifications...")
                 notifier.send_alert(alerts)
+            check_count += 1
         except Exception as e:
-            print(f"Monitor error: {e}")
+            print(f"❌ Monitor error: {e}")
 
         # Sleep in small chunks so we can stop quickly
         for _ in range(interval):
@@ -303,8 +311,12 @@ def api_get_watchlist():
                         prices[str(t).strip().upper()] = None
         wb.close()
 
-    # Merge into a sector-grouped structure
+    # Fetch earnings dates for all tickers
     sectors = _load_sectors()
+    all_tickers = [t for tl in sectors.values() for t in tl]
+    earnings = fetch_earnings_dates(all_tickers) if all_tickers else {}
+
+    # Merge into a sector-grouped structure
     result = {}
     target_map = {item["ticker"]: item for item in items}
 
@@ -316,6 +328,7 @@ def api_get_watchlist():
                 "ticker": tk,
                 "current_price": prices.get(tk),
                 "targets": info.get("targets", []),
+                "earnings_date": earnings.get(tk),
             })
     return jsonify(result)
 
@@ -348,23 +361,45 @@ def api_set_targets():
 
 @app.get("/api/prices/refresh")
 def api_refresh_prices():
-    """Fetch live prices for all tickers and update Excel."""
+    """Fetch live prices for all tickers and update Excel, then return updated watchlist."""
     sectors = _load_sectors()
     all_tickers = [t for tl in sectors.values() for t in tl]
     if not all_tickers:
         return jsonify({})
 
     prices = fetch_prices(all_tickers)
+    earnings = fetch_earnings_dates(all_tickers)
 
     config = _load_config()
     wl_path = config["files"]["watchlist_excel"]
     if os.path.exists(wl_path):
         try:
             update_current_prices(wl_path, prices)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error updating prices in Excel: {e}")
 
-    return jsonify(prices)
+    _ensure_watchlist()
+    
+    try:
+        items = read_watchlist(wl_path)
+    except FileNotFoundError:
+        items = []
+    
+    target_map = {item["ticker"]: item for item in items}
+    
+    result = {}
+    for sector, tickers in sectors.items():
+        result[sector] = []
+        for tk in tickers:
+            info = target_map.get(tk, {})
+            result[sector].append({
+                "ticker": tk,
+                "current_price": prices.get(tk),
+                "targets": info.get("targets", []),
+                "earnings_date": earnings.get(tk),
+            })
+    
+    return jsonify(result)
 
 
 @app.get("/api/alerts")
@@ -379,6 +414,15 @@ def api_get_alerts():
                 alerts.append(row)
     alerts.reverse()  # newest first
     return jsonify(alerts)
+
+
+@app.delete("/api/alerts")
+def api_clear_alerts():
+    config = _load_config()
+    log_path = config["files"]["alert_log"]
+    if os.path.exists(log_path):
+        os.remove(log_path)
+    return jsonify({"ok": True, "cleared": True})
 
 
 @app.get("/api/monitor/status")
@@ -415,6 +459,39 @@ def api_check_once():
 
 
 # ---------------------------------------------------------------------------
+# Auto-start monitoring
+# ---------------------------------------------------------------------------
+def _auto_start_monitoring():
+    """Automatically start background monitoring when app starts."""
+    global monitor_thread, monitor_running
+    config = _load_config()
+    
+    # Only auto-start if not already running
+    with monitor_lock:
+        if not monitor_running:
+            monitor_running = True
+            monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
+            monitor_thread.start()
+            print("✅ Background alert monitoring auto-started")
+            print(f"   Check interval: {config['monitoring']['check_interval_seconds']} seconds")
+            print(f"   Email alerts: {'ON' if config['email']['enabled'] else 'OFF'}")
+            print(f"   SMS alerts: {'ON' if config['sms']['enabled'] else 'OFF'}")
+
+
+# ---------------------------------------------------------------------------
+# Initialize on import so it also runs under gunicorn (no __main__ there).
+# Idempotent + cheap.
+_ensure_watchlist()
+
+# Monitor auto-start is env-gated to avoid double-running (e.g. when a separate
+# systemd "main.py monitor" process handles monitoring). Default ON for local
+# dev and single-worker gunicorn. Set AUTO_START_MONITOR=0 to disable.
+if os.environ.get("AUTO_START_MONITOR", "1") == "1":
+    _auto_start_monitoring()
+
+
 if __name__ == "__main__":
-    _ensure_watchlist()
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "5000"))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(debug=debug, host=host, port=port)

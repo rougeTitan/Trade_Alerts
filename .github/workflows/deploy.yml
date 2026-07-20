@@ -1,0 +1,108 @@
+name: Deploy to EC2
+
+# App-level deploy (build web + upload + restart services).
+# Infra is provisioned ONCE with Terraform (deploy/terraform). This workflow
+# assumes the instance already exists and only redeploys the application.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   EC2_HOST            Elastic IP or domain of the instance
+#   EC2_SSH_KEY         Private key contents (deploy/terraform/trade-alerts-key.pem)
+#   EXPO_PUBLIC_API_URL e.g. http://<EC2_HOST> or https://<domain>
+#   CONFIG_JSON         Full contents of config.json (email/SMS secrets)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install web deps
+        working-directory: mobile
+        run: npm ci
+
+      - name: Build web
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+        run: npx expo export -p web
+
+      - name: Write config.json
+        run: printf '%s' '${{ secrets.CONFIG_JSON }}' > config.json
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload backend + config
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          TARGET="ec2-user@${HOST}"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "mkdir -p ~/trade-alerts/web"
+          scp -i ~/.ssh/deploy_key \
+            app.py main.py monitor.py notifier.py price_fetcher.py \
+            excel_manager.py scheduler.py check_watchlist.py \
+            requirements.txt config.json sectors.json \
+            "$TARGET:~/trade-alerts/"
+          scp -i ~/.ssh/deploy_key -r templates deploy "$TARGET:~/trade-alerts/"
+
+      - name: Upload web build
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          TARGET="ec2-user@${HOST}"
+          # replace web dir contents atomically-ish
+          ssh -i ~/.ssh/deploy_key "$TARGET" "rm -rf ~/trade-alerts/web/* "
+          scp -i ~/.ssh/deploy_key -r mobile/dist/* "$TARGET:~/trade-alerts/web/"
+
+      - name: Install deps + restart services
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "ec2-user@${HOST}" bash -s <<'EOF'
+          set -e
+          cd ~/trade-alerts
+          python3 -m venv venv 2>/dev/null || true
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo cp deploy/gunicorn.service /etc/systemd/system/gunicorn.service
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now gunicorn
+          sudo systemctl restart gunicorn
+          sudo cp deploy/nginx.conf /etc/nginx/conf.d/trade-alerts.conf
+          sudo nginx -t
+          sudo systemctl reload nginx
+          echo "REMOTE_DONE"
+          EOF
+
+      - name: Smoke test
+        env:
+          API: ${{ secrets.EXPO_PUBLIC_API_URL }}
+        run: |
+          sleep 5
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${API}/api/alerts" || echo 000)
+          echo "GET /api/alerts -> $code"
+          test "$code" = "200"

@@ -45,6 +45,18 @@ Trade Alerts/
 
 ## 🚀 Quick Start
 
+### **⚡ Single Command Startup**
+
+To start the Trade Alerts system with a single command:
+
+```bash
+python main.py monitor
+```
+
+This will start the price monitor, which will check prices every 30 seconds during market hours and send email alerts when any price target is breached.
+
+---
+
 ### 1. Clone & Install
 
 ```bash

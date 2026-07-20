@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is gitignored.
+
+region           = "us-east-1"
+instance_type    = "t4g.micro" # Arm/free-tier. For x86 use t3.micro + x86_64 AMI param below.
+root_volume_gb   = 8
+
+# SECURITY: lock SSH to your IP. Find it at https://checkip.amazonaws.com
+# allowed_ssh_cidr = "203.0.113.10/32"
+allowed_ssh_cidr = "0.0.0.0/0"
+
+# If using an x86 instance type (t3.*), also set:
+# ami_ssm_parameter = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import TargetPill from './TargetPill';
 
-export default function StockRow({ ticker, price, targets, sector, onEdit, onRemove }) {
+export default function StockRow({ ticker, price, targets, sector, earningsDate, onEdit, onRemove }) {
   const { theme } = useTheme();
   const c = theme.colors;
   const { width: screenWidth } = useWindowDimensions();
@@ -16,6 +16,29 @@ export default function StockRow({ ticker, price, targets, sector, onEdit, onRem
   const cardWidth = (screenWidth - padding - gap * (cols - 1)) / cols;
 
   const priceStr = price != null ? `$${price.toFixed(2)}` : '—';
+  
+  // Format earnings date
+  const formatEarningsDate = (dateStr) => {
+    if (!dateStr) return null;
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffTime = date - now;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 0) return null;
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Tomorrow';
+      if (diffDays <= 7) return `${diffDays}d`;
+      if (diffDays <= 30) return `${Math.ceil(diffDays / 7)}w`;
+      
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch {
+      return null;
+    }
+  };
+  
+  const earningsLabel = formatEarningsDate(earningsDate);
 
   const webHoverProps = Platform.OS === 'web' ? {
     onMouseEnter: () => setHovered(true),
@@ -43,7 +66,18 @@ export default function StockRow({ ticker, price, targets, sector, onEdit, onRem
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.ticker, { color: c.accent }]}>{ticker}</Text>
-          <Text style={[styles.sector, { color: c.textSecondary }]}>{sector}</Text>
+          <View style={styles.subheaderRow}>
+            <Text style={[styles.sector, { color: c.textSecondary }]}>{sector}</Text>
+            {earningsLabel && (
+              <>
+                <Text style={[styles.separator, { color: c.textSecondary }]}>•</Text>
+                <View style={[styles.earningsBadge, { backgroundColor: c.yellow + '20', borderColor: c.yellow + '40' }]}>
+                  <Ionicons name="calendar-outline" size={9} color={c.yellow} />
+                  <Text style={[styles.earningsText, { color: c.yellow }]}>{earningsLabel}</Text>
+                </View>
+              </>
+            )}
+          </View>
         </View>
         <Text style={[styles.price, { color: c.text }]}>{priceStr}</Text>
       </View>
@@ -84,9 +118,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  headerLeft: { gap: 1, flex: 1 },
+  headerLeft: { gap: 2, flex: 1 },
   ticker: { fontSize: 14, fontWeight: '800' },
+  subheaderRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   sector: { fontSize: 10, fontWeight: '500' },
+  separator: { fontSize: 10, opacity: 0.5 },
+  earningsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  earningsText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
   price: { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
   targetsRow: {
     flexDirection: 'row',

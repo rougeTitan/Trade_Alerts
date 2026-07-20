@@ -1,7 +1,11 @@
 import React from 'react';
+import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
+import { useFonts } from 'expo-font';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
+import { AuthProvider } from '../src/auth/AuthContext';
 
 function RootLayoutInner() {
   const { theme, isDark } = useTheme();
@@ -24,9 +28,19 @@ function RootLayoutInner() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    ...Ionicons.font,
+  });
+
+  if (!fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: '#0f1117' }} />;
+  }
+
   return (
     <ThemeProvider>
-      <RootLayoutInner />
+      <AuthProvider>
+        <RootLayoutInner />
+      </AuthProvider>
     </ThemeProvider>
   );
 }

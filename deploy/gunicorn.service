@@ -1,0 +1,25 @@
+[Unit]
+Description=Trade Alerts - Web API (gunicorn) + background monitor
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/trade-alerts
+# 1 worker on purpose: the background price monitor runs as an in-process
+# thread (AUTO_START_MONITOR=1). Multiple workers would spawn duplicate
+# monitors and send duplicate alerts. Do NOT also enable trade-alerts.service.
+Environment=AUTO_START_MONITOR=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ec2-user/trade-alerts/venv/bin/gunicorn app:app \
+    --workers 1 \
+    --threads 4 \
+    --timeout 120 \
+    --bind 127.0.0.1:5000 \
+    --access-logfile /home/ec2-user/trade-alerts/gunicorn_access.log \
+    --error-logfile /home/ec2-user/trade-alerts/gunicorn_error.log
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

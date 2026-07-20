@@ -27,3 +27,15 @@ nul
 mobile/nul
 .venv/
 mobile/node_modules/
+
+# Expo / web build artifacts
+mobile/dist/
+mobile/.expo/
+mobile/web-build/
+
+# Terraform state & secrets (also covered in deploy/terraform/.gitignore)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.pem
+deploy/terraform/terraform.tfvars

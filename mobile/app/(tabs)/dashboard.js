@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/theme/ThemeContext';
 import api from '../../src/services/api';
 import SectorDrawer from '../../src/components/SectorDrawer';
@@ -20,6 +21,7 @@ import AddSectorModal from '../../src/components/AddSectorModal';
 import MonitorBadge from '../../src/components/MonitorBadge';
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const { theme, isDark, toggleTheme } = useTheme();
   const c = theme.colors;
 
@@ -27,6 +29,7 @@ export default function DashboardScreen() {
   const [activeSector, setActiveSector] = useState('__all__');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [monitorRunning, setMonitorRunning] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -55,17 +58,44 @@ export default function DashboardScreen() {
     loadData();
   }, [loadData]);
 
-  const onRefresh = useCallback(() => {
+  // Auto-refresh prices on first mount
+  useEffect(() => {
+    const autoRefresh = async () => {
+      try {
+        const updatedWatchlist = await api.refreshPrices();
+        setWatchlist(updatedWatchlist);
+      } catch (e) {
+        console.warn('Auto price refresh failed:', e.message);
+      }
+    };
+    autoRefresh();
+  }, []);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    loadData();
-  }, [loadData]);
+    try {
+      const updatedWatchlist = await api.refreshPrices();
+      setWatchlist(updatedWatchlist);
+      const status = await api.getMonitorStatus();
+      setMonitorRunning(status.running);
+    } catch (e) {
+      console.warn('Refresh failed:', e.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const handleRefreshPrices = async () => {
+    if (refreshingPrices) return;
+    
+    setRefreshingPrices(true);
     try {
-      await api.refreshPrices();
-      loadData();
+      const updatedWatchlist = await api.refreshPrices();
+      setWatchlist(updatedWatchlist);
     } catch (e) {
       console.warn('Price refresh failed:', e.message);
+    } finally {
+      setRefreshingPrices(false);
     }
   };
 
@@ -191,20 +221,32 @@ export default function DashboardScreen() {
       {/* Action Bar */}
       <View style={[styles.actionBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: c.accent }]}
+          style={[styles.actionBtn, { backgroundColor: c.accent, opacity: refreshingPrices ? 0.6 : 1 }]}
           onPress={handleRefreshPrices}
+          disabled={refreshingPrices}
         >
-          <Ionicons name="refresh" size={14} color="#fff" />
-          <Text style={styles.actionBtnText}>Refresh</Text>
+          {refreshingPrices ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="refresh" size={14} color="#fff" />
+          )}
+          <Text style={styles.actionBtnText}>{refreshingPrices ? 'Refreshing...' : 'Refresh'}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}
           onPress={handleCheckOnce}
         >
           <Ionicons name="flash-outline" size={14} color={c.text} />
-          <Text style={[styles.actionBtnTextAlt, { color: c.text }]}>Check Now</Text>
+          <Text style={[styles.actionBtnTextAlt, { color: c.text }]}>Check Alerts</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}
+          onPress={() => router.push('/bulk-edit')}
+        >
+          <Ionicons name="list-outline" size={14} color={c.text} />
+          <Text style={[styles.actionBtnTextAlt, { color: c.text }]}>Bulk Edit</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}
           onPress={() => setAddStockModal(true)}
@@ -253,6 +295,7 @@ export default function DashboardScreen() {
                 price={stock.current_price}
                 targets={stock.targets || []}
                 sector={stock.sector}
+                earningsDate={stock.earnings_date}
                 onEdit={() => handleEditTargets(stock.ticker, stock.sector)}
                 onRemove={() => handleRemoveStock(stock.ticker, stock.sector)}
               />

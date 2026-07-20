@@ -39,10 +39,12 @@ class PriceMonitor:
                 with open(self.alert_log_file, "r") as f:
                     reader = csv.DictReader(f)
                     for row in reader:
-                        key = f"{row.get('ticker')}_{row.get('target_price')}_{row.get('direction')}"
+                        # Use target_direction (ABOVE/BELOW/BOTH) not direction (breach type)
+                        target_dir = row.get('target_direction', row.get('direction'))  # Fallback for old logs
+                        key = f"{row.get('ticker')}_{row.get('target_price')}_{target_dir}"
                         fired.add(key)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"⚠️  Could not load fired alerts: {e}")
         return fired
     
     def _log_alert(self, alert: dict):
@@ -51,7 +53,7 @@ class PriceMonitor:
         
         with open(self.alert_log_file, "a", newline="") as f:
             fieldnames = ["timestamp", "sector", "ticker", "current_price", 
-                         "target_price", "direction", "status"]
+                         "target_price", "target_direction", "direction", "status"]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             if not file_exists:
                 writer.writeheader()
@@ -65,9 +67,12 @@ class PriceMonitor:
             pass
         print("🔄 Alert tracking reset for new trading day.")
     
-    def check_prices(self) -> list:
+    def check_prices(self, use_cached: bool = False) -> list:
         """
         Main monitoring function. Fetches prices, compares to targets, returns alerts.
+        
+        Args:
+            use_cached: If True, use current prices from Excel instead of fetching (for efficiency)
         
         Returns:
             List of alert dicts that were triggered this cycle.
@@ -86,19 +91,29 @@ class PriceMonitor:
         # Get all unique tickers
         all_tickers = list(set(item["ticker"] for item in watchlist))
         
-        # Fetch current prices
-        print(f"📊 Fetching prices for {len(all_tickers)} stocks...")
-        current_prices = fetch_prices(all_tickers)
-        
-        if not current_prices:
-            print("❌ Failed to fetch any prices.")
-            return []
-        
-        # Update Excel with current prices
-        try:
-            update_current_prices(self.watchlist_file, current_prices)
-        except Exception as e:
-            print(f"⚠️  Could not update Excel prices: {e}")
+        # Use cached prices from Excel or fetch fresh ones
+        if use_cached:
+            # Use existing prices from watchlist (already loaded)
+            current_prices = {}
+            for item in watchlist:
+                ticker = item["ticker"]
+                if "current_price" in item and item["current_price"] is not None:
+                    current_prices[ticker] = item["current_price"]
+            print(f"📊 Using cached prices for {len(current_prices)} stocks...")
+        else:
+            # Fetch current prices
+            print(f"📊 Fetching fresh prices for {len(all_tickers)} stocks...")
+            current_prices = fetch_prices(all_tickers)
+            
+            if not current_prices:
+                print("❌ Failed to fetch any prices.")
+                return []
+            
+            # Update Excel with current prices
+            try:
+                update_current_prices(self.watchlist_file, current_prices)
+            except Exception as e:
+                print(f"⚠️  Could not update Excel prices: {e}")
         
         # Check each stock against its targets
         triggered_alerts = []
@@ -158,7 +173,8 @@ class PriceMonitor:
                         "ticker": ticker,
                         "current_price": price,
                         "target_price": target_price,
-                        "direction": breach_type,
+                        "target_direction": direction,  # Original target direction (ABOVE/BELOW/BOTH)
+                        "direction": breach_type,  # Actual breach type (CROSSED ABOVE/CROSSED BELOW)
                         "status": "TRIGGERED"
                     }
                     triggered_alerts.append(alert)
