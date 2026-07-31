@@ -49,6 +49,12 @@ if (-not [System.IO.Path]::IsPathRooted($KeyFile)) {
 Info "Instance IP: $PublicIp"
 Info "SSH key: $KeyFile"
 
+# Windows OpenSSH refuses private keys that are readable by other users.
+# Strip inheritance and grant read only to the current user.
+Info "Hardening key file permissions"
+icacls $KeyFile /inheritance:r 2>$null | Out-Null
+icacls $KeyFile /grant:r "$($env:USERNAME):R" 2>$null | Out-Null
+
 # --- 2. Build the web app pointed at the server -----------------------------
 $ApiUrl = if ($Domain) { "https://$Domain" } else { "http://$PublicIp" }
 Info "Building web (EXPO_PUBLIC_API_URL=$ApiUrl)"
@@ -59,7 +65,7 @@ Pop-Location
 $DistDir = Join-Path $MobileDir "dist"
 
 # --- 3. Wait for SSH --------------------------------------------------------
-$SshOpts = @("-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=10")
+$SshOpts = @("-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "ConnectTimeout=10")
 $Target  = "ec2-user@$PublicIp"
 Info "Waiting for SSH..."
 $ready = $false
@@ -88,10 +94,13 @@ $BackendFiles = @(
   "requirements.txt","config.json","sectors.json"
 ) | ForEach-Object { Join-Path $RepoRoot $_ } | Where-Object { Test-Path $_ }
 
-ssh -i $KeyFile @SshOpts $Target "mkdir -p ~/trade-alerts/web"
+ssh -i $KeyFile @SshOpts $Target "mkdir -p ~/trade-alerts/web ~/trade-alerts/deploy"
 scp -i $KeyFile @SshOpts $BackendFiles "${Target}:~/trade-alerts/"
 scp -i $KeyFile @SshOpts -r (Join-Path $RepoRoot "templates") "${Target}:~/trade-alerts/"
-scp -i $KeyFile @SshOpts -r (Join-Path $RepoRoot "deploy")    "${Target}:~/trade-alerts/"
+# Only files the server needs — NOT deploy/terraform (huge .terraform/ provider binaries).
+$DeployFiles = @("gunicorn.service","nginx.conf","setup_ec2.sh","install_service.sh","trade-alerts.service") |
+  ForEach-Object { Join-Path $PSScriptRoot $_ } | Where-Object { Test-Path $_ }
+scp -i $KeyFile @SshOpts $DeployFiles "${Target}:~/trade-alerts/deploy/"
 
 Info "Uploading web build"
 scp -i $KeyFile @SshOpts -r "$DistDir/*" "${Target}:~/trade-alerts/web/"

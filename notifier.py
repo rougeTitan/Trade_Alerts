@@ -7,6 +7,7 @@ import smtplib
 import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formatdate, make_msgid, formataddr
 from datetime import datetime
 
 
@@ -47,7 +48,7 @@ class Notifier:
         
         count = len(alerts)
         tickers = ", ".join(set(a["ticker"] for a in alerts))
-        subject = f"🚨 Price Alert: {tickers} ({count} alert{'s' if count > 1 else ''})"
+        subject = f"Trade Alerts: {tickers} ({count} alert{'s' if count > 1 else ''})"
         
         # Plain text version
         lines = [
@@ -145,11 +146,17 @@ class Notifier:
             password = self.email_config["sender_password"]
             receivers = self.email_config["receiver_emails"]
             
+            sender_domain = sender.split("@")[-1]
+
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = sender
+            msg["From"] = formataddr(("Trade Alerts", sender))
             msg["To"] = ", ".join(receivers)
-            
+            msg["Reply-To"] = sender
+            # Proper headers reduce the chance of landing in spam
+            msg["Date"] = formatdate(localtime=True)
+            msg["Message-ID"] = make_msgid(domain=sender_domain)
+
             msg.attach(MIMEText(body_text, "plain"))
             msg.attach(MIMEText(body_html, "html"))
             
