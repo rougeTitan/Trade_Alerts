@@ -1,0 +1,54 @@
+variable "region" {
+  description = "AWS region to deploy into."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_name" {
+  description = "Name prefix for all resources."
+  type        = string
+  default     = "trade-alerts"
+}
+
+variable "timezone" {
+  description = "IANA timezone for the schedules and alert timestamps."
+  type        = string
+  default     = "America/New_York"
+}
+
+variable "noon_cron" {
+  description = "EventBridge cron for the midday run (in var.timezone). Weekdays 12:00."
+  type        = string
+  default     = "cron(0 12 ? * MON-FRI *)"
+}
+
+variable "afternoon_cron" {
+  description = "EventBridge cron for the afternoon run (in var.timezone). Weekdays 15:00."
+  type        = string
+  default     = "cron(0 15 ? * MON-FRI *)"
+}
+
+variable "lambda_timeout" {
+  description = "Lambda timeout in seconds (price fetch for ~90 tickers)."
+  type        = number
+  default     = 180
+}
+
+variable "lambda_memory" {
+  description = "Lambda memory (MB). More memory = more CPU = faster yfinance calls."
+  type        = number
+  default     = 1024
+}
+
+variable "image_tag_override" {
+  description = "Optional fixed image tag. Leave empty to auto-tag from source hash."
+  type        = string
+  default     = ""
+}
+
+# ---- Local files reused from the repo root (../../) --------------------------
+variable "repo_root" {
+  description = "Path to the repository root, relative to this module."
+  type        = string
+  default     = "../.."
+}

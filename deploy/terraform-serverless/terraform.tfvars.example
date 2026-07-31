@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and adjust as needed. terraform.tfvars is gitignored.
+
+region       = "us-east-1"
+project_name = "trade-alerts"
+timezone     = "America/New_York"
+
+# Weekdays only. Times are interpreted in the timezone above (DST-aware).
+noon_cron      = "cron(0 12 ? * MON-FRI *)"
+afternoon_cron = "cron(0 15 ? * MON-FRI *)"
+
+lambda_timeout = 180
+lambda_memory  = 1024

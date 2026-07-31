@@ -118,6 +118,27 @@ def cmd_check_once():
         print("✅ No alerts triggered.")
 
 
+def cmd_check_and_alert():
+    """Run a single price check and send notifications automatically (non-interactive).
+
+    Intended for scheduled/headless execution (cron, AWS Lambda, boot service).
+    """
+    from monitor import PriceMonitor
+    from notifier import Notifier
+
+    print("🔍 Running scheduled price check (auto-send)...")
+    monitor = PriceMonitor()
+    notifier = Notifier()
+
+    alerts = monitor.check_prices()
+    if alerts:
+        print(f"🚨 {len(alerts)} alert(s) triggered - sending notifications...")
+        notifier.send_alert(alerts)
+    else:
+        print("✅ No alerts triggered.")
+    return alerts
+
+
 def cmd_test_email():
     """Send a test email to verify configuration."""
     from notifier import Notifier
@@ -148,6 +169,7 @@ def main():
         "generate": cmd_generate,
         "monitor": cmd_monitor,
         "check-once": cmd_check_once,
+        "check-and-alert": cmd_check_and_alert,
         "test-email": cmd_test_email,
         "test-price": cmd_test_price,
     }
