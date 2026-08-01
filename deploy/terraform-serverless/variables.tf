@@ -46,6 +46,16 @@ variable "image_tag_override" {
   default     = ""
 }
 
+variable "build_image" {
+  description = <<-EOT
+    When true (local default), Terraform builds + pushes the Lambda image via a
+    local PowerShell + Docker step. Set false in CI, where the workflow builds and
+    pushes the image itself and passes image_tag_override.
+  EOT
+  type        = bool
+  default     = true
+}
+
 # ---- Local files reused from the repo root (../../) --------------------------
 variable "repo_root" {
   description = "Path to the repository root, relative to this module."

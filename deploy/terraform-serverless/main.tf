@@ -58,6 +58,8 @@ resource "aws_ecr_repository" "this" {
 # Builds the image from the repo root and pushes the source-hash tag to ECR.
 # Requires Docker + AWS CLI available locally and AWS creds in the environment.
 resource "null_resource" "docker_build_push" {
+  count = var.build_image ? 1 : 0
+
   triggers = {
     image_tag = local.image_tag
     repo_url  = local.repo_url

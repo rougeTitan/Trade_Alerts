@@ -53,6 +53,33 @@ Terraform will:
 
 Outputs include the Lambda name, S3 bucket, and the schedule summary.
 
+## Hands-off deploy via GitHub Actions (recommended)
+
+`.github/workflows/deploy-serverless.yml` builds the image, pushes to ECR, and runs
+Terraform on every push to `main`. No Docker/Terraform/AWS CLI needed on your machine.
+After it runs once, AWS fires the Lambda on its own (weekdays 12:00 & 15:00 ET).
+
+Add these repo secrets (**Settings -> Secrets and variables -> Actions**):
+
+| Secret | Required | Value |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID` | yes | IAM key allowed to create Lambda/ECR/S3/IAM/Secrets/Scheduler |
+| `AWS_SECRET_ACCESS_KEY` | yes | matching secret |
+| `CONFIG_JSON` | yes | full contents of your local `config.json` (Gmail creds) |
+| `AWS_REGION` | no | defaults to `us-east-1` (repo variable also works) |
+| `WATCHLIST_B64` | no | base64 of `watchlist.xlsx` so S3 is seeded automatically |
+
+Make `WATCHLIST_B64` (PowerShell):
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("watchlist.xlsx")) | Set-Clipboard
+```
+Then push (or run the workflow manually from the Actions tab). Done — fully automatic.
+
+> The IAM user needs permissions for ecr, lambda, s3, iam, secretsmanager,
+> scheduler, logs, and sts. For least privilege scope it to those services.
+
+---
+
 ## Test it now (don't wait for noon)
 
 ```powershell

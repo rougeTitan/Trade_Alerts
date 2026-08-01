@@ -10,11 +10,9 @@ name: Deploy to EC2
 #   EXPO_PUBLIC_API_URL e.g. http://<EC2_HOST> or https://<domain>
 #   CONFIG_JSON         Full contents of config.json (email/SMS secrets)
 
+# Manual-only: project moved to serverless (see deploy-serverless.yml).
+# Kept for the legacy always-on EC2 stack. Run by hand if you ever use it.
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**.md'
   workflow_dispatch:
 
 concurrency:

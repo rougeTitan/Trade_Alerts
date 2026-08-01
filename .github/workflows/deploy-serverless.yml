@@ -1,0 +1,99 @@
+name: Deploy Serverless (Lambda schedules)
+
+# Fully hands-off deploy of the scheduled alert checker.
+# On every push to main it builds the Lambda image, pushes to ECR, and applies
+# the Terraform in deploy/terraform-serverless. After this runs once, AWS
+# EventBridge fires the Lambda automatically on weekdays at 12:00 and 15:00 ET
+# (see deploy/terraform-serverless/main.tf) - no machine of yours needs to be on.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   AWS_ACCESS_KEY_ID       IAM access key with rights to create the stack
+#   AWS_SECRET_ACCESS_KEY   matching secret
+#   CONFIG_JSON             full contents of config.json (Gmail creds live here)
+# Optional secrets / variables:
+#   AWS_REGION  (repo variable or secret; defaults to us-east-1)
+#   WATCHLIST_B64  base64 of watchlist.xlsx, so the bucket is seeded automatically
+#                  (create with: certutil -encode / `base64 watchlist.xlsx`)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - 'deploy/lambda/**'
+      - 'deploy/terraform-serverless/**'
+      - '.github/workflows/deploy-serverless.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-serverless
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'us-east-1' }}
+  PROJECT: trade-alerts
+  TF_DIR: deploy/terraform-serverless
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write config.json (Gmail creds)
+        run: printf '%s' '${{ secrets.CONFIG_JSON }}' > config.json
+
+      - name: Restore watchlist.xlsx (optional)
+        if: ${{ secrets.WATCHLIST_B64 != '' }}
+        run: printf '%s' '${{ secrets.WATCHLIST_B64 }}' | base64 -d > watchlist.xlsx
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Create ECR repo (phase 1)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply -input=false -auto-approve \
+            -target=aws_ecr_repository.this \
+            -var "build_image=false" \
+            -var "region=${AWS_REGION}"
+
+      - name: Build & push Lambda image
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE="${REGISTRY}/${PROJECT}-lambda:${GITHUB_SHA::12}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+          docker build -f deploy/lambda/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Terraform apply (phase 2 - full stack)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var "build_image=false" \
+            -var "image_tag_override=${IMAGE_TAG}" \
+            -var "region=${AWS_REGION}"
+
+      - name: Show outputs
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform output
