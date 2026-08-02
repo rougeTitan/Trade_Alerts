@@ -46,6 +46,12 @@ variable "image_tag_override" {
   default     = ""
 }
 
+variable "web_image_tag_override" {
+  description = "Optional fixed tag for the web dashboard image. Empty = auto source hash."
+  type        = string
+  default     = ""
+}
+
 variable "build_image" {
   description = <<-EOT
     When true (local default), Terraform builds + pushes the Lambda image via a

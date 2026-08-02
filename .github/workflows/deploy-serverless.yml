@@ -1,10 +1,12 @@
 name: Deploy Serverless (Lambda schedules)
 
-# Fully hands-off deploy of the scheduled alert checker.
-# On every push to main it builds the Lambda image, pushes to ECR, and applies
-# the Terraform in deploy/terraform-serverless. After this runs once, AWS
-# EventBridge fires the Lambda automatically on weekdays at 12:00 and 15:00 ET
-# (see deploy/terraform-serverless/main.tf) - no machine of yours needs to be on.
+# Fully hands-off deploy of the scheduled checker AND the web dashboard.
+# On every push to main it builds both Lambda images (checker + web), pushes to
+# ECR, applies the Terraform in deploy/terraform-serverless, then builds the
+# Expo web frontend against the Lambda Function URL and publishes it to
+# S3 + CloudFront. After this runs once everything is automatic:
+# EventBridge fires the checker on weekdays at 12:00 and 15:00 ET, and the
+# dashboard is reachable at the CloudFront URL (terraform output dashboard_url).
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
 #   AWS_ACCESS_KEY_ID       IAM access key with rights to create the stack
@@ -21,7 +23,9 @@ on:
     paths:
       - '**.py'
       - 'deploy/lambda/**'
+      - 'deploy/lambda-web/**'
       - 'deploy/terraform-serverless/**'
+      - 'mobile/**'
       - '.github/workflows/deploy-serverless.yml'
   workflow_dispatch:
 
@@ -75,23 +79,29 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: terraform init -input=false
 
-      - name: Create ECR repo (phase 1)
+      - name: Create ECR repos (phase 1)
         working-directory: ${{ env.TF_DIR }}
         run: |
           terraform apply -input=false -auto-approve \
             -target=aws_ecr_repository.this \
+            -target=aws_ecr_repository.web \
             -var "build_image=false" \
             -var "region=${AWS_REGION}"
 
-      - name: Build & push Lambda image
+      - name: Build & push Lambda images (checker + web)
         run: |
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           REGISTRY="${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          IMAGE="${REGISTRY}/${PROJECT}-lambda:${GITHUB_SHA::12}"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          echo "IMAGE_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
-          docker build -f deploy/lambda/Dockerfile -t "$IMAGE" .
-          docker push "$IMAGE"
+          TAG="${GITHUB_SHA::12}"
+          echo "IMAGE_TAG=${TAG}" >> "$GITHUB_ENV"
+
+          CHECKER="${REGISTRY}/${PROJECT}-lambda:${TAG}"
+          docker build -f deploy/lambda/Dockerfile -t "$CHECKER" .
+          docker push "$CHECKER"
+
+          WEB="${REGISTRY}/${PROJECT}-web:${TAG}"
+          docker build -f deploy/lambda-web/Dockerfile -t "$WEB" .
+          docker push "$WEB"
 
       - name: Terraform apply (phase 2 - full stack)
         working-directory: ${{ env.TF_DIR }}
@@ -99,8 +109,34 @@ jobs:
           terraform apply -input=false -auto-approve \
             -var "build_image=false" \
             -var "image_tag_override=${IMAGE_TAG}" \
+            -var "web_image_tag_override=${IMAGE_TAG}" \
             -var "region=${AWS_REGION}"
 
-      - name: Show outputs
+      - name: Capture Terraform outputs
         working-directory: ${{ env.TF_DIR }}
-        run: terraform output
+        run: |
+          terraform output
+          echo "API_URL=$(terraform output -raw web_function_url | sed 's:/*$::')" >> "$GITHUB_ENV"
+          echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket)" >> "$GITHUB_ENV"
+          echo "CF_ID=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_ENV"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Build web frontend (points at Function URL)
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_API_URL: ${{ env.API_URL }}
+        run: |
+          npm ci
+          npx expo export -p web
+
+      - name: Publish frontend to S3 + invalidate CloudFront
+        run: |
+          aws s3 sync mobile/dist "s3://${FRONTEND_BUCKET}" --delete
+          aws cloudfront create-invalidation --distribution-id "$CF_ID" --paths "/*"
+          echo "Dashboard: https://$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)"

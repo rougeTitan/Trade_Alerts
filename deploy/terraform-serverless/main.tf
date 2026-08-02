@@ -158,7 +158,7 @@ data "aws_iam_policy_document" "lambda_perms" {
   }
   statement {
     sid       = "S3State"
-    actions   = ["s3:GetObject", "s3:PutObject"]
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.state.arn}/*"]
   }
   statement {

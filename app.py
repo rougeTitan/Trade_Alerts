@@ -18,7 +18,9 @@ from price_fetcher import fetch_prices, fetch_earnings_dates
 from monitor import PriceMonitor
 from notifier import Notifier
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# Run from DATA_DIR when set (e.g. /tmp on AWS Lambda), else the app directory.
+_data_dir = os.environ.get("DATA_DIR")
+os.chdir(_data_dir if _data_dir else os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True

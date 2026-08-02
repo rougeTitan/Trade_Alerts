@@ -53,6 +53,24 @@ Terraform will:
 
 Outputs include the Lambda name, S3 bucket, and the schedule summary.
 
+## Web dashboard (edit alerts from a browser)
+
+The dashboard is also serverless (~$0):
+
+- **Frontend** (Expo web build) -> private **S3** bucket, served over HTTPS by **CloudFront**.
+- **Backend** (the existing Flask `app.py`) -> **Lambda** via `apig-wsgi`, exposed by a
+  public **Lambda Function URL**.
+- **State** (`watchlist.xlsx`, `sectors.json`, `alert_log.csv`) lives in the SAME S3
+  bucket as the scheduler. The web Lambda downloads it to `/tmp` on cold start and
+  uploads any file you change back to S3 - so edits show up in the next scheduled run.
+
+After a deploy, open the URL from `terraform output dashboard_url`
+(e.g. `https://xxxx.cloudfront.net`). The CI builds the frontend against the Function
+URL automatically, so there is nothing to configure.
+
+Relevant files: `deploy/lambda-web/` (image + handler) and
+`deploy/terraform-serverless/web.tf` (Lambda, Function URL, S3, CloudFront).
+
 ## Hands-off deploy via GitHub Actions (recommended)
 
 `.github/workflows/deploy-serverless.yml` builds the image, pushes to ECR, and runs
