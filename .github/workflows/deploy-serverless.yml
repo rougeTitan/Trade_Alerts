@@ -33,6 +33,8 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'us-east-1' }}
   PROJECT: trade-alerts
   TF_DIR: deploy/terraform-serverless
+  WL1: ${{ secrets.WATCHLIST_B64 }}
+  WL2: ${{ secrets.WATCHLIST_B64_2 }}
 
 jobs:
   deploy:
@@ -45,11 +47,11 @@ jobs:
         run: printf '%s' '${{ secrets.CONFIG_JSON }}' > config.json
 
       - name: Restore watchlist.xlsx (optional)
-        if: ${{ secrets.WATCHLIST_B64 != '' }}
+        if: ${{ env.WL1 != '' }}
         run: |
           {
-            printf '%s' '${{ secrets.WATCHLIST_B64 }}'
-            printf '%s' '${{ secrets.WATCHLIST_B64_2 }}'
+            printf '%s' "$WL1"
+            printf '%s' "$WL2"
           } | base64 -d > watchlist.xlsx
           ls -l watchlist.xlsx
 
