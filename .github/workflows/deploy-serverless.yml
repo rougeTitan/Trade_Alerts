@@ -46,7 +46,12 @@ jobs:
 
       - name: Restore watchlist.xlsx (optional)
         if: ${{ secrets.WATCHLIST_B64 != '' }}
-        run: printf '%s' '${{ secrets.WATCHLIST_B64 }}' | base64 -d > watchlist.xlsx
+        run: |
+          {
+            printf '%s' '${{ secrets.WATCHLIST_B64 }}'
+            printf '%s' '${{ secrets.WATCHLIST_B64_2 }}'
+          } | base64 -d > watchlist.xlsx
+          ls -l watchlist.xlsx
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
