@@ -163,6 +163,20 @@ jobs:
             -var "web_image_tag_override=${IMAGE_TAG}" \
             -var "region=${AWS_REGION}"
 
+      - name: Ensure web Function URL is public (safety net)
+        run: |
+          # Force auth type NONE and (re)attach the public invoke permission.
+          # Idempotent + identical to the Terraform config, so no state drift.
+          aws lambda update-function-url-config \
+            --function-name "${PROJECT}-web" \
+            --auth-type NONE >/dev/null 2>&1 || true
+          aws lambda add-permission \
+            --function-name "${PROJECT}-web" \
+            --statement-id AllowPublicFunctionUrl \
+            --action lambda:InvokeFunctionUrl \
+            --principal "*" \
+            --function-url-auth-type NONE >/dev/null 2>&1 || true
+
       - name: Capture Terraform outputs
         working-directory: ${{ env.TF_DIR }}
         run: |
