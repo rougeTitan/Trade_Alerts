@@ -99,6 +99,8 @@ resource "aws_lambda_function_url" "web" {
 }
 
 # Allow the CloudFront distribution (and only it) to invoke the Function URL.
+# AWS_IAM auth requires both lambda:InvokeFunctionUrl and lambda:InvokeFunction
+# permissions on the function.
 resource "aws_lambda_permission" "web_url" {
   statement_id           = "AllowCloudFrontInvoke"
   action                 = "lambda:InvokeFunctionUrl"
@@ -106,6 +108,14 @@ resource "aws_lambda_permission" "web_url" {
   principal              = "cloudfront.amazonaws.com"
   source_arn             = aws_cloudfront_distribution.frontend.arn
   function_url_auth_type = "AWS_IAM"
+}
+
+resource "aws_lambda_permission" "web_invoke" {
+  statement_id  = "AllowCloudFrontInvokeFunction"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.web.function_name
+  principal     = "cloudfront.amazonaws.com"
+  source_arn    = aws_cloudfront_distribution.frontend.arn
 }
 
 # ---------------------------------------------------------------------------
@@ -278,16 +288,17 @@ output "web_ecr_repository_url" {
   value = aws_ecr_repository.web.repository_url
 }
 
+output "dashboard_url" {
+  description = "CloudFront distribution domain for the web dashboard."
+  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}
+
 output "frontend_bucket" {
-  description = "S3 bucket that holds the built web app."
+  description = "S3 bucket that holds the built web frontend."
   value       = aws_s3_bucket.frontend.bucket
 }
 
 output "cloudfront_distribution_id" {
-  value = aws_cloudfront_distribution.frontend.id
-}
-
-output "dashboard_url" {
-  description = "Open this in a browser to use the dashboard."
-  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+  description = "CloudFront distribution ID for cache invalidations."
+  value       = aws_cloudfront_distribution.frontend.id
 }

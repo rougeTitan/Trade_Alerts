@@ -159,11 +159,12 @@ jobs:
         run: |
           # Remove leftover invoke-url statements from earlier attempts so
           # Terraform can (re)create its own permission without a 409 conflict.
-          for SID in AllowPublicFunctionUrl FunctionURLAllowPublicAccess AllowCloudFrontInvoke; do
+          for SID in AllowPublicFunctionUrl FunctionURLAllowPublicAccess AllowCloudFrontInvoke AllowCloudFrontInvokeFunction; do
             aws lambda remove-permission --function-name "${PROJECT}-web" \
               --statement-id "$SID" 2>/dev/null || true
           done
           terraform state rm aws_lambda_permission.web_url 2>/dev/null || true
+          terraform state rm aws_lambda_permission.web_invoke 2>/dev/null || true
 
       - name: Terraform apply (phase 2 - full stack)
         working-directory: ${{ env.TF_DIR }}
