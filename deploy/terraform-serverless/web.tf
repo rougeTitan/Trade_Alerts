@@ -149,6 +149,23 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
+# SPA fallback done at the edge on the S3 behavior ONLY: rewrite extensionless
+# paths (e.g. /dashboard) to /index.html. /api/* is a separate behavior, so API
+# responses are never rewritten (unlike a distribution-wide custom_error_response).
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "${var.project_name}-spa-rewrite"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var req = event.request;
+      var seg = req.uri.split('/').pop();
+      if (seg.indexOf('.') === -1) { req.uri = '/index.html'; }
+      return req;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   default_root_object = "index.html"
@@ -191,6 +208,11 @@ resource "aws_cloudfront_distribution" "frontend" {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
 
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
+
     forwarded_values {
       query_string = false
       cookies {
@@ -203,17 +225,9 @@ resource "aws_cloudfront_distribution" "frontend" {
     max_ttl     = 86400
   }
 
-  # SPA fallback: unknown paths return index.html.
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
+  # SPA fallback handled by the spa_rewrite CloudFront Function on the S3
+  # behavior (see above); no distribution-wide custom_error_response so it
+  # cannot clobber /api responses.
 
   restrictions {
     geo_restriction {

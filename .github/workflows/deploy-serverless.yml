@@ -208,10 +208,14 @@ jobs:
         run: |
           CF="https://$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)"
           echo "Dashboard: $CF"
-          for i in $(seq 1 8); do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$CF/api/watchlist" || echo 000)
-            echo "attempt $i: GET /api/watchlist -> $CODE"
-            [ "$CODE" = "200" ] && exit 0
+          # Must be JSON from the Lambda origin. A text/html 200 means the request
+          # fell through to the S3 SPA fallback (i.e. /api/* not routed yet).
+          for i in $(seq 1 15); do
+            CT=$(curl -s -o /dev/null -w "%{content_type}" "$CF/api/watchlist" || echo none)
+            echo "attempt $i: /api/watchlist content-type=$CT"
+            case "$CT" in
+              application/json*) echo "API OK (JSON served via Lambda origin)"; exit 0 ;;
+            esac
             sleep 20
           done
-          echo "::warning::API not 200 yet - CloudFront may still be deploying the new /api behavior. Retry in a few minutes."
+          echo "::warning::/api still not returning JSON - CloudFront may still be deploying the /api behavior. Re-check in a few minutes."
