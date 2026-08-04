@@ -165,17 +165,26 @@ jobs:
 
       - name: Ensure web Function URL is public (safety net)
         run: |
-          # Force auth type NONE and (re)attach the public invoke permission.
-          # Idempotent + identical to the Terraform config, so no state drift.
+          set -euo pipefail
+          # Force auth type NONE.
           aws lambda update-function-url-config \
             --function-name "${PROJECT}-web" \
-            --auth-type NONE >/dev/null 2>&1 || true
+            --auth-type NONE >/dev/null
+          # Clean re-add of the public invoke permission (remove is best-effort).
+          aws lambda remove-permission \
+            --function-name "${PROJECT}-web" \
+            --statement-id AllowPublicFunctionUrl 2>/dev/null || true
           aws lambda add-permission \
             --function-name "${PROJECT}-web" \
             --statement-id AllowPublicFunctionUrl \
             --action lambda:InvokeFunctionUrl \
             --principal "*" \
-            --function-url-auth-type NONE >/dev/null 2>&1 || true
+            --function-url-auth-type NONE
+          echo "----- resource policy -----"
+          aws lambda get-policy --function-name "${PROJECT}-web" --query Policy --output text
+          echo "----- function url config -----"
+          aws lambda get-function-url-config --function-name "${PROJECT}-web" \
+            --query '{Url:FunctionUrl,Auth:AuthType}'
 
       - name: Capture Terraform outputs
         working-directory: ${{ env.TF_DIR }}
