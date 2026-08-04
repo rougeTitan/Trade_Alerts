@@ -154,6 +154,16 @@ jobs:
           imp aws_lambda_function_url.web     "${PROJECT}-web"
           imp aws_lambda_permission.web_url   "${PROJECT}-web/AllowPublicFunctionUrl"
 
+      - name: Recreate web Function URL cleanly
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          # A Function URL can get stuck returning 403 even with auth NONE +
+          # a valid public resource policy. Drop the URL + its permission so the
+          # apply below provisions them fresh (new subdomain, clean auth state).
+          aws lambda delete-function-url-config --function-name "${PROJECT}-web" 2>/dev/null || true
+          terraform state rm aws_lambda_function_url.web 2>/dev/null || true
+          terraform state rm aws_lambda_permission.web_url 2>/dev/null || true
+
       - name: Terraform apply (phase 2 - full stack)
         working-directory: ${{ env.TF_DIR }}
         run: |
@@ -180,11 +190,14 @@ jobs:
             --action lambda:InvokeFunctionUrl \
             --principal "*" \
             --function-url-auth-type NONE
-          echo "----- resource policy -----"
-          aws lambda get-policy --function-name "${PROJECT}-web" --query Policy --output text
           echo "----- function url config -----"
-          aws lambda get-function-url-config --function-name "${PROJECT}-web" \
-            --query '{Url:FunctionUrl,Auth:AuthType}'
+          URL=$(aws lambda get-function-url-config --function-name "${PROJECT}-web" \
+                  --query FunctionUrl --output text)
+          echo "URL=$URL"
+          echo "----- runner curl (expect 200) -----"
+          sleep 5
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "${URL}api/watchlist" || echo "000")
+          echo "GET /api/watchlist -> $CODE"
 
       - name: Capture Terraform outputs
         working-directory: ${{ env.TF_DIR }}
