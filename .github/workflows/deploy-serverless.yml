@@ -75,13 +75,38 @@ jobs:
         with:
           terraform_version: 1.9.5
 
+      - name: Ensure Terraform state bucket
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET="${PROJECT}-tfstate-${ACCOUNT}"
+          echo "TF_STATE_BUCKET=${BUCKET}" >> "$GITHUB_ENV"
+          if ! aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            if [ "$AWS_REGION" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket "$BUCKET"
+            else
+              aws s3api create-bucket --bucket "$BUCKET" \
+                --create-bucket-configuration LocationConstraint="$AWS_REGION"
+            fi
+            aws s3api put-bucket-versioning --bucket "$BUCKET" \
+              --versioning-configuration Status=Enabled
+          fi
+
       - name: Terraform init
         working-directory: ${{ env.TF_DIR }}
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="region=${AWS_REGION}"
 
       - name: Create ECR repos (phase 1)
         working-directory: ${{ env.TF_DIR }}
         run: |
+          # Adopt repos that already exist in AWS but aren't yet in state.
+          terraform import -var "build_image=false" -var "region=${AWS_REGION}" \
+            aws_ecr_repository.this "${PROJECT}-lambda" 2>/dev/null || true
+          terraform import -var "build_image=false" -var "region=${AWS_REGION}" \
+            aws_ecr_repository.web "${PROJECT}-web" 2>/dev/null || true
+
           terraform apply -input=false -auto-approve \
             -target=aws_ecr_repository.this \
             -target=aws_ecr_repository.web \
@@ -102,6 +127,32 @@ jobs:
           WEB="${REGISTRY}/${PROJECT}-web:${TAG}"
           docker build -f deploy/lambda-web/Dockerfile -t "$WEB" .
           docker push "$WEB"
+
+      - name: Adopt pre-existing resources into state (idempotent)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          imp() {
+            terraform import -input=false \
+              -var "build_image=false" -var "region=${AWS_REGION}" \
+              -var "image_tag_override=${IMAGE_TAG}" \
+              -var "web_image_tag_override=${IMAGE_TAG}" \
+              "$1" "$2" 2>/dev/null || true
+          }
+          # Only resources with deterministic names that error on re-create.
+          imp aws_s3_bucket.state             "${PROJECT}-state-${ACCOUNT}"
+          imp aws_s3_bucket.frontend          "${PROJECT}-web-${ACCOUNT}"
+          imp aws_secretsmanager_secret.email "${PROJECT}/email"
+          imp aws_iam_role.lambda             "${PROJECT}-lambda-role"
+          imp aws_iam_role.scheduler          "${PROJECT}-scheduler-role"
+          imp aws_cloudwatch_log_group.lambda "/aws/lambda/${PROJECT}-checker"
+          imp aws_cloudwatch_log_group.web    "/aws/lambda/${PROJECT}-web"
+          imp aws_lambda_function.checker     "${PROJECT}-checker"
+          imp aws_lambda_function.web         "${PROJECT}-web"
+          imp aws_scheduler_schedule.noon     "default/${PROJECT}-noon"
+          imp aws_scheduler_schedule.afternoon "default/${PROJECT}-3pm"
+          imp aws_lambda_function_url.web     "${PROJECT}-web"
+          imp aws_lambda_permission.web_url   "${PROJECT}-web/AllowPublicFunctionUrl"
 
       - name: Terraform apply (phase 2 - full stack)
         working-directory: ${{ env.TF_DIR }}

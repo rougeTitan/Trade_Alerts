@@ -6,6 +6,13 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # Remote state so CI runs (and local) share one persisted state.
+  # bucket + region are supplied at init time via -backend-config in CI.
+  backend "s3" {
+    key     = "serverless/terraform.tfstate"
+    encrypt = true
+  }
 }
 
 provider "aws" {
