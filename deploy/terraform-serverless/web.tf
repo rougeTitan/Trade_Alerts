@@ -90,24 +90,22 @@ resource "aws_lambda_function" "web" {
   ]
 }
 
+# IAM-authed Function URL (a public NONE URL is blocked by an Org guardrail).
+# CloudFront reaches it via Origin Access Control, SigV4-signing each request.
 resource "aws_lambda_function_url" "web" {
   function_name      = aws_lambda_function.web.function_name
-  authorization_type = "NONE"
-
-  cors {
-    allow_origins = ["*"]
-    allow_methods = ["*"]
-    allow_headers = ["*"]
-    max_age       = 86400
-  }
+  authorization_type = "AWS_IAM"
+  invoke_mode        = "BUFFERED"
 }
 
+# Allow the CloudFront distribution (and only it) to invoke the Function URL.
 resource "aws_lambda_permission" "web_url" {
-  statement_id           = "AllowPublicFunctionUrl"
+  statement_id           = "AllowCloudFrontInvoke"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.web.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
+  principal              = "cloudfront.amazonaws.com"
+  source_arn             = aws_cloudfront_distribution.frontend.arn
+  function_url_auth_type = "AWS_IAM"
 }
 
 # ---------------------------------------------------------------------------
@@ -133,6 +131,24 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+# OAC so CloudFront SigV4-signs requests to the Lambda Function URL origin.
+resource "aws_cloudfront_origin_access_control" "lambda" {
+  name                              = "${var.project_name}-lambda-oac"
+  origin_access_control_origin_type = "lambda"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# Managed policies: never cache API responses, forward everything except Host
+# (Host must be excluded so OAC can set it for correct SigV4 signing).
+data "aws_cloudfront_cache_policy" "disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   default_root_object = "index.html"
@@ -142,6 +158,31 @@ resource "aws_cloudfront_distribution" "frontend" {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "frontend-s3"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
+  }
+
+  # Lambda Function URL as an origin for the /api/* routes.
+  origin {
+    domain_name              = replace(replace(aws_lambda_function_url.web.function_url, "https://", ""), "/", "")
+    origin_id                = "lambda-api"
+    origin_access_control_id = aws_cloudfront_origin_access_control.lambda.id
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # API calls -> Lambda origin (signed, uncached, all methods).
+  ordered_cache_behavior {
+    path_pattern             = "/api/*"
+    target_origin_id         = "lambda-api"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
   default_cache_behavior {

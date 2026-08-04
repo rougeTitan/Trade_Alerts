@@ -154,20 +154,15 @@ jobs:
           # NB: web Function URL + its permission are intentionally NOT imported
           # here; the next step recreates them from scratch.
 
-      - name: Recreate web Function URL cleanly
+      - name: Clean stale Function URL permissions
         working-directory: ${{ env.TF_DIR }}
         run: |
-          # A Function URL can get stuck returning 403 even with auth NONE +
-          # a valid public resource policy. Drop the URL AND every invoke-url
-          # statement so the apply below provisions them fresh (new subdomain,
-          # clean auth state). Removing the statements avoids a 409 when
-          # Terraform re-creates aws_lambda_permission.web_url.
-          aws lambda delete-function-url-config --function-name "${PROJECT}-web" 2>/dev/null || true
-          aws lambda remove-permission --function-name "${PROJECT}-web" \
-            --statement-id AllowPublicFunctionUrl 2>/dev/null || true
-          aws lambda remove-permission --function-name "${PROJECT}-web" \
-            --statement-id FunctionURLAllowPublicAccess 2>/dev/null || true
-          terraform state rm aws_lambda_function_url.web 2>/dev/null || true
+          # Remove leftover invoke-url statements from earlier attempts so
+          # Terraform can (re)create its own permission without a 409 conflict.
+          for SID in AllowPublicFunctionUrl FunctionURLAllowPublicAccess AllowCloudFrontInvoke; do
+            aws lambda remove-permission --function-name "${PROJECT}-web" \
+              --statement-id "$SID" 2>/dev/null || true
+          done
           terraform state rm aws_lambda_permission.web_url 2>/dev/null || true
 
       - name: Terraform apply (phase 2 - full stack)
@@ -179,24 +174,12 @@ jobs:
             -var "web_image_tag_override=${IMAGE_TAG}" \
             -var "region=${AWS_REGION}"
 
-      - name: Verify web Function URL is public
-        run: |
-          set -euo pipefail
-          # Terraform owns the URL + public permission now; just verify.
-          URL=$(aws lambda get-function-url-config --function-name "${PROJECT}-web" \
-                  --query FunctionUrl --output text)
-          AUTH=$(aws lambda get-function-url-config --function-name "${PROJECT}-web" \
-                  --query AuthType --output text)
-          echo "URL=$URL  AUTH=$AUTH"
-          sleep 5
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" "${URL}api/watchlist" || echo "000")
-          echo "GET /api/watchlist -> $CODE"
-
       - name: Capture Terraform outputs
         working-directory: ${{ env.TF_DIR }}
         run: |
           terraform output
-          echo "API_URL=$(terraform output -raw web_function_url | sed 's:/*$::')" >> "$GITHUB_ENV"
+          # Frontend talks to the API same-origin through CloudFront (/api/*).
+          echo "API_URL=$(terraform output -raw dashboard_url)" >> "$GITHUB_ENV"
           echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket)" >> "$GITHUB_ENV"
           echo "CF_ID=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_ENV"
 
@@ -207,7 +190,7 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Build web frontend (points at Function URL)
+      - name: Build web frontend (points at CloudFront /api)
         working-directory: mobile
         env:
           EXPO_PUBLIC_API_URL: ${{ env.API_URL }}
@@ -220,3 +203,15 @@ jobs:
           aws s3 sync mobile/dist "s3://${FRONTEND_BUCKET}" --delete
           aws cloudfront create-invalidation --distribution-id "$CF_ID" --paths "/*"
           echo "Dashboard: https://$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)"
+
+      - name: Verify dashboard API via CloudFront
+        run: |
+          CF="https://$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)"
+          echo "Dashboard: $CF"
+          for i in $(seq 1 8); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$CF/api/watchlist" || echo 000)
+            echo "attempt $i: GET /api/watchlist -> $CODE"
+            [ "$CODE" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "::warning::API not 200 yet - CloudFront may still be deploying the new /api behavior. Retry in a few minutes."
