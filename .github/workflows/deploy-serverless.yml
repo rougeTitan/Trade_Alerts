@@ -151,16 +151,22 @@ jobs:
           imp aws_lambda_function.web         "${PROJECT}-web"
           imp aws_scheduler_schedule.noon     "default/${PROJECT}-noon"
           imp aws_scheduler_schedule.afternoon "default/${PROJECT}-3pm"
-          imp aws_lambda_function_url.web     "${PROJECT}-web"
-          imp aws_lambda_permission.web_url   "${PROJECT}-web/AllowPublicFunctionUrl"
+          # NB: web Function URL + its permission are intentionally NOT imported
+          # here; the next step recreates them from scratch.
 
       - name: Recreate web Function URL cleanly
         working-directory: ${{ env.TF_DIR }}
         run: |
           # A Function URL can get stuck returning 403 even with auth NONE +
-          # a valid public resource policy. Drop the URL + its permission so the
-          # apply below provisions them fresh (new subdomain, clean auth state).
+          # a valid public resource policy. Drop the URL AND every invoke-url
+          # statement so the apply below provisions them fresh (new subdomain,
+          # clean auth state). Removing the statements avoids a 409 when
+          # Terraform re-creates aws_lambda_permission.web_url.
           aws lambda delete-function-url-config --function-name "${PROJECT}-web" 2>/dev/null || true
+          aws lambda remove-permission --function-name "${PROJECT}-web" \
+            --statement-id AllowPublicFunctionUrl 2>/dev/null || true
+          aws lambda remove-permission --function-name "${PROJECT}-web" \
+            --statement-id FunctionURLAllowPublicAccess 2>/dev/null || true
           terraform state rm aws_lambda_function_url.web 2>/dev/null || true
           terraform state rm aws_lambda_permission.web_url 2>/dev/null || true
 
@@ -173,28 +179,15 @@ jobs:
             -var "web_image_tag_override=${IMAGE_TAG}" \
             -var "region=${AWS_REGION}"
 
-      - name: Ensure web Function URL is public (safety net)
+      - name: Verify web Function URL is public
         run: |
           set -euo pipefail
-          # Force auth type NONE.
-          aws lambda update-function-url-config \
-            --function-name "${PROJECT}-web" \
-            --auth-type NONE >/dev/null
-          # Clean re-add of the public invoke permission (remove is best-effort).
-          aws lambda remove-permission \
-            --function-name "${PROJECT}-web" \
-            --statement-id AllowPublicFunctionUrl 2>/dev/null || true
-          aws lambda add-permission \
-            --function-name "${PROJECT}-web" \
-            --statement-id AllowPublicFunctionUrl \
-            --action lambda:InvokeFunctionUrl \
-            --principal "*" \
-            --function-url-auth-type NONE
-          echo "----- function url config -----"
+          # Terraform owns the URL + public permission now; just verify.
           URL=$(aws lambda get-function-url-config --function-name "${PROJECT}-web" \
                   --query FunctionUrl --output text)
-          echo "URL=$URL"
-          echo "----- runner curl (expect 200) -----"
+          AUTH=$(aws lambda get-function-url-config --function-name "${PROJECT}-web" \
+                  --query AuthType --output text)
+          echo "URL=$URL  AUTH=$AUTH"
           sleep 5
           CODE=$(curl -s -o /dev/null -w "%{http_code}" "${URL}api/watchlist" || echo "000")
           echo "GET /api/watchlist -> $CODE"
