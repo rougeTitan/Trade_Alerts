@@ -23,27 +23,27 @@ class ApiService {
 
   async _fetch(path, options = {}) {
     const url = `${this.baseUrl}${path}`;
+    const body = options.body && typeof options.body === 'string' ? options.body : '';
     const headers = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
 
     // CloudFront OAC + AWS_IAM Lambda function URLs require the payload hash
-    // header for any method that sends a body; otherwise POST/PUT/PATCH fail
-    // with InvalidSignatureException.
-    if (
-      Platform.OS === 'web' &&
-      options.body &&
-      typeof options.body === 'string' &&
-      typeof crypto !== 'undefined' &&
-      crypto.subtle
-    ) {
-      const encoder = new TextEncoder();
-      const digest = await crypto.subtle.digest('SHA-256', encoder.encode(options.body));
-      const hash = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      headers['x-amz-content-sha256'] = hash;
+    // header for every request; otherwise unsigned requests fail with 403.
+    if (Platform.OS === 'web' && typeof globalThis !== 'undefined') {
+      const gCrypto = globalThis.crypto;
+      if (gCrypto && gCrypto.subtle) {
+        const encoder = new TextEncoder();
+        const digest = await gCrypto.subtle.digest('SHA-256', encoder.encode(body));
+        const hash = Array.from(new Uint8Array(digest))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+        headers['x-amz-content-sha256'] = hash;
+      } else if (!body) {
+        headers['x-amz-content-sha256'] =
+          'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+      }
     }
 
     const res = await fetch(url, {
@@ -51,8 +51,8 @@ class ApiService {
       headers,
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || `Request failed: ${res.status}`);
+      const respBody = await res.json().catch(() => ({}));
+      throw new Error(respBody.error || `Request failed: ${res.status}`);
     }
     return res.json();
   }
