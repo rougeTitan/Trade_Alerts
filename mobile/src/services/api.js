@@ -23,12 +23,32 @@ class ApiService {
 
   async _fetch(path, options = {}) {
     const url = `${this.baseUrl}${path}`;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    // CloudFront OAC + AWS_IAM Lambda function URLs require the payload hash
+    // header for any method that sends a body; otherwise POST/PUT/PATCH fail
+    // with InvalidSignatureException.
+    if (
+      Platform.OS === 'web' &&
+      options.body &&
+      typeof options.body === 'string' &&
+      typeof crypto !== 'undefined' &&
+      crypto.subtle
+    ) {
+      const encoder = new TextEncoder();
+      const digest = await crypto.subtle.digest('SHA-256', encoder.encode(options.body));
+      const hash = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      headers['x-amz-content-sha256'] = hash;
+    }
+
     const res = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
