@@ -7,11 +7,13 @@ import os
 import csv
 import json
 import threading
+import time
 from datetime import datetime
 
 import pytz
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 from excel_manager import read_watchlist, update_current_prices, create_watchlist_template
 from price_fetcher import fetch_prices, fetch_earnings_dates
@@ -458,6 +460,89 @@ def api_check_once():
     mon = PriceMonitor()
     alerts = mon.check_prices()
     return jsonify({"alerts": alerts, "count": len(alerts)})
+
+
+# ---------------------------------------------------------------------------
+# File upload -> S3
+# ---------------------------------------------------------------------------
+UPLOAD_PAGE = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trade Alerts - Upload</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 520px; margin: 60px auto; padding: 0 20px; background: #0f172a; color: #e2e8f0; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    p { color: #94a3b8; margin-bottom: 24px; }
+    form { background: #1e293b; padding: 24px; border-radius: 12px; border: 1px solid #334155; }
+    input[type="file"] { color: #e2e8f0; margin-bottom: 20px; }
+    button { background: #22c55e; color: #fff; border: none; border-radius: 8px; padding: 12px 20px; font-weight: 600; cursor: pointer; }
+    a { color: #22c55e; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>Upload a file</h1>
+  <p>Selected files are dropped into the Trade Alerts S3 bucket under <code>uploads/</code>.</p>
+  <form action="/api/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" required />
+    <br />
+    <button type="submit">Upload to S3</button>
+  </form>
+</body>
+</html>"""
+
+
+@app.route("/api/upload", methods=["GET", "POST"])
+def api_upload():
+    if request.method == "GET":
+        return UPLOAD_PAGE
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
+    filename = secure_filename(file.filename)
+    if not filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    key = f"uploads/{int(time.time())}_{filename}"
+    bucket = os.environ.get("STATE_BUCKET")
+
+    if bucket:
+        try:
+            import boto3
+
+            s3 = boto3.client("s3")
+            s3.upload_fileobj(file, bucket, key)
+            return f"""<!DOCTYPE html>
+<html><body style="font-family:sans-serif;max-width:520px;margin:60px auto;background:#0f172a;color:#e2e8f0">
+  <h2>✅ Uploaded</h2>
+  <p>Stored as <code>s3://{bucket}/{key}</code></p>
+  <p><a href="/api/upload" style="color:#22c55e">Upload another</a></p>
+</body></html>"""
+        except Exception as e:
+            return f"""<!DOCTYPE html>
+<html><body style="font-family:sans-serif;max-width:520px;margin:60px auto;background:#0f172a;color:#e2e8f0">
+  <h2>❌ Upload failed</h2>
+  <p>{e}</p>
+  <p><a href="/api/upload" style="color:#22c55e">Try again</a></p>
+</body></html>""", 500
+
+    # Local fallback: save to an uploads/ folder in DATA_DIR or project root
+    upload_dir = os.path.join(_data_dir or os.path.dirname(os.path.abspath(__file__)), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    path = os.path.join(upload_dir, os.path.basename(key))
+    file.save(path)
+    return f"""<!DOCTYPE html>
+<html><body style="font-family:sans-serif;max-width:520px;margin:60px auto;">
+  <h2>✅ Saved locally</h2>
+  <p>{path}</p>
+  <p><a href="/api/upload">Upload another</a></p>
+</body></html>"""
 
 
 # ---------------------------------------------------------------------------

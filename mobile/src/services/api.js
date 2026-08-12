@@ -17,6 +17,10 @@ class ApiService {
     this.baseUrl = url;
   }
 
+  uploadUrl() {
+    return `${this.baseUrl}/api/upload`;
+  }
+
   async _fetch(path, options = {}) {
     const url = `${this.baseUrl}${path}`;
     const res = await fetch(url, {

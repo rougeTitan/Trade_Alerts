@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { useTheme } from '../../src/theme/ThemeContext';
 import api from '../../src/services/api';
 import SectorDrawer from '../../src/components/SectorDrawer';
@@ -238,6 +239,13 @@ export default function DashboardScreen() {
         >
           <Ionicons name="flash-outline" size={14} color={c.text} />
           <Text style={[styles.actionBtnTextAlt, { color: c.text }]}>Check Alerts</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}
+          onPress={() => Linking.openURL(api.uploadUrl())}
+        >
+          <Ionicons name="cloud-upload-outline" size={14} color={c.accent} />
+          <Text style={[styles.actionBtnTextAlt, { color: c.accent }]}>Upload</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
