@@ -131,9 +131,21 @@ export default function BulkEditScreen() {
       return stock.targets[i] || null;
     });
     setEditing(null);
+
+    // Optimistically update local state so the value reflects instantly and
+    // rapid successive edits don't get clobbered by a slow backend reload.
+    setStocks((prev) =>
+      prev.map((s) =>
+        s.ticker === stock.ticker && s.sector === stock.sector
+          ? { ...s, targets: newTargets }
+          : s
+      )
+    );
+
+    // Persist in the background; no full reload (getWatchlist is slow and
+    // would overwrite in-flight edits).
     try {
       await api.setTargets(stock.ticker, stock.sector, newTargets);
-      await loadStocks();
     } catch (e) {
       console.warn('Save failed:', e.message);
     }

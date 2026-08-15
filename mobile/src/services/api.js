@@ -13,10 +13,6 @@ class ApiService {
     this.baseUrl = baseUrl;
   }
 
-  setBaseUrl(url) {
-    this.baseUrl = url;
-  }
-
   uploadUrl() {
     return `${this.baseUrl}/api/upload`;
   }
@@ -58,10 +54,6 @@ class ApiService {
   }
 
   // ── Sectors ──────────────────────────────────────────
-
-  getSectors() {
-    return this._fetch('/api/sectors');
-  }
 
   addSector(name) {
     return this._fetch('/api/sectors/add', {
