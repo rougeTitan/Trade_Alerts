@@ -116,8 +116,11 @@ export default function DashboardScreen() {
 
   const handleCheckOnce = async () => {
     try {
-      await api.checkOnce();
-      loadData();
+      const { count } = await api.checkOnce();
+      await loadData();
+      if (count > 0) {
+        router.push('/(tabs)/alerts');
+      }
     } catch (e) {
       console.warn('Check once failed:', e.message);
     }
