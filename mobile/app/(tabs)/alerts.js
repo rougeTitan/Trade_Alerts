@@ -235,9 +235,14 @@ export default function AlertsScreen() {
     setFilteredAlerts(filtered);
   }, [groupedAlerts, searchQuery, activeFilter]);
 
-  const handleDismissAlert = useCallback((ticker, direction) => {
+  const handleDismissAlert = useCallback(async (ticker, direction) => {
     setGroupedAlerts(prev => prev.filter(a => !(a.ticker === ticker && a.direction === direction)));
     setAlerts(prev => prev.filter(a => !(a.ticker === ticker && a.direction === direction)));
+    try {
+      await api.dismissAlert(ticker, direction);
+    } catch (e) {
+      console.warn('Dismiss alert failed:', e.message);
+    }
   }, []);
 
   const handleReset = useCallback(async () => {

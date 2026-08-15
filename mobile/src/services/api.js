@@ -123,6 +123,12 @@ class ApiService {
     return this._fetch('/api/alerts', { method: 'DELETE' });
   }
 
+  dismissAlert(ticker, direction) {
+    return this._fetch(`/api/alerts/${encodeURIComponent(ticker)}/${encodeURIComponent(direction)}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ── Monitor ──────────────────────────────────────────
 
   getMonitorStatus() {

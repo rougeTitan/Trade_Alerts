@@ -431,6 +431,34 @@ def api_clear_alerts():
     return jsonify({"ok": True, "cleared": True})
 
 
+@app.delete("/api/alerts/<ticker>/<direction>")
+def api_dismiss_alert(ticker, direction):
+    config = _load_config()
+    log_path = config["files"]["alert_log"]
+    if not os.path.exists(log_path):
+        return jsonify({"ok": True, "removed": 0})
+
+    rows = []
+    fieldnames = None
+    removed = 0
+    with open(log_path, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        for row in reader:
+            if (row.get("ticker") or "").upper() == ticker.upper() and (row.get("direction") or "").upper() == direction.upper():
+                removed += 1
+                continue
+            rows.append(row)
+
+    if removed:
+        with open(log_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    return jsonify({"ok": True, "removed": removed})
+
+
 @app.get("/api/monitor/status")
 def api_monitor_status():
     return jsonify({"running": monitor_running})

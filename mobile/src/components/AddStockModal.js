@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,14 @@ export default function AddStockModal({ visible, sectors, onAdd, onClose }) {
 
   const [selectedSector, setSelectedSector] = useState(sectors[0] || '');
   const [ticker, setTicker] = useState('');
+
+  // Keep selection valid: sectors load async and can change (add/delete),
+  // so a stale/empty selection would make "Add Stock" silently no-op.
+  useEffect(() => {
+    if (!sectors.includes(selectedSector)) {
+      setSelectedSector(sectors[0] || '');
+    }
+  }, [sectors, selectedSector]);
 
   const handleAdd = () => {
     const t = ticker.trim().toUpperCase();
