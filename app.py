@@ -352,6 +352,9 @@ def api_set_targets():
     # Validate targets
     clean = []
     for t in targets:
+        if t is None:
+            clean.append(None)
+            continue
         try:
             p = float(t["price"])
             d = str(t.get("direction", "BOTH")).upper()

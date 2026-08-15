@@ -216,9 +216,11 @@ def read_watchlist(input_file: str = "watchlist.xlsx") -> list:
                             "direction": direction
                         })
                     except (ValueError, TypeError):
-                        continue
+                        targets.append(None)
+                else:
+                    targets.append(None)
             
-            if targets:
+            if any(targets):
                 watchlist.append({
                     "sector": sector,
                     "ticker": ticker,

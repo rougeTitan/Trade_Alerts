@@ -130,6 +130,8 @@ class PriceMonitor:
             prev_price = self.previous_prices.get(ticker)
             
             for target in item["targets"]:
+                if not target:
+                    continue
                 target_price = target["price"]
                 direction = target["direction"]
                 
