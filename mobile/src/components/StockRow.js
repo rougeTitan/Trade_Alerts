@@ -97,8 +97,9 @@ export default function StockRow({ ticker, price, targets, sector, earningsDate,
           <Ionicons name="create-outline" size={14} color={c.accent} />
           <Text style={[styles.editBtnText, { color: c.accent }]}>Edit Targets</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={onRemove} style={styles.removeBtn}>
-          <Ionicons name="close-circle-outline" size={18} color={c.red} />
+        <TouchableOpacity onPress={onRemove} style={[styles.removeBtn, { backgroundColor: c.red + '15' }]}>
+          <Ionicons name="trash-outline" size={14} color={c.red} />
+          <Text style={[styles.removeBtnText, { color: c.red }]}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -155,5 +156,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   editBtnText: { fontSize: 12, fontWeight: '600' },
-  removeBtn: { padding: 4 },
+  removeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  removeBtnText: { fontSize: 12, fontWeight: '600' },
 });

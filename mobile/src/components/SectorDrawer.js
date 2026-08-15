@@ -15,7 +15,7 @@ import { useTheme } from '../theme/ThemeContext';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.78, 320);
 
-export default function SectorDrawer({ visible, onClose, sectors, activeSector, onSelect }) {
+export default function SectorDrawer({ visible, onClose, sectors, activeSector, onSelect, onDelete }) {
   const { theme } = useTheme();
   const c = theme.colors;
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -113,30 +113,39 @@ export default function SectorDrawer({ visible, onClose, sectors, activeSector, 
             {sectorNames.map((name) => {
               const isActive = activeSector === name;
               return (
-                <TouchableOpacity
+                <View
                   key={name}
                   style={[
                     styles.item,
                     isActive && { backgroundColor: c.surface2, borderLeftColor: c.accent, borderLeftWidth: 3 },
                   ]}
-                  onPress={() => onSelect(name)}
                 >
-                  <Text
-                    style={[
-                      styles.itemText,
-                      { color: isActive ? c.accent : c.textSecondary },
-                      isActive && styles.itemTextActive,
-                    ]}
-                    numberOfLines={1}
+                  <TouchableOpacity
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                    onPress={() => onSelect(name)}
                   >
-                    {name}
-                  </Text>
-                  <View style={[styles.countBadge, isActive ? { backgroundColor: c.accent } : { backgroundColor: c.surface2 }]}>
-                    <Text style={[styles.countText, { color: isActive ? '#fff' : c.textSecondary }]}>
-                      {sectors[name]?.length || 0}
+                    <Text
+                      style={[
+                        styles.itemText,
+                        { color: isActive ? c.accent : c.textSecondary },
+                        isActive && styles.itemTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {name}
                     </Text>
-                  </View>
-                </TouchableOpacity>
+                    <View style={[styles.countBadge, isActive ? { backgroundColor: c.accent } : { backgroundColor: c.surface2 }]}>
+                      <Text style={[styles.countText, { color: isActive ? '#fff' : c.textSecondary }]}>
+                        {sectors[name]?.length || 0}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  {onDelete && (
+                    <TouchableOpacity style={styles.deleteBtn} onPress={() => onDelete(name)}>
+                      <Ionicons name="trash-outline" size={16} color={c.red} />
+                    </TouchableOpacity>
+                  )}
+                </View>
               );
             })}
           </ScrollView>
@@ -188,6 +197,7 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
   },
   itemText: { fontSize: 14, flex: 1 },
+  deleteBtn: { padding: 6, marginLeft: 4 },
   itemTextActive: { fontWeight: '700' },
   countBadge: {
     borderRadius: 10,

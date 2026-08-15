@@ -173,6 +173,18 @@ export default function DashboardScreen() {
     }
   };
 
+  const handleDeleteSector = async (name) => {
+    try {
+      await api.deleteSector(name);
+      if (activeSector === name) {
+        setActiveSector('__all__');
+      }
+      loadData();
+    } catch (e) {
+      console.warn('Delete sector failed:', e.message);
+    }
+  };
+
   // Build flat stock list based on active sector
   const sectors = Object.keys(watchlist);
   const visibleSectors = activeSector === '__all__' ? sectors : [activeSector];
@@ -322,6 +334,10 @@ export default function DashboardScreen() {
         onSelect={(s) => {
           setActiveSector(s);
           setDrawerOpen(false);
+        }}
+        onDelete={(name) => {
+          setDrawerOpen(false);
+          handleDeleteSector(name);
         }}
       />
 
