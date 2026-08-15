@@ -75,11 +75,6 @@ def _write_config():
         json.dump(config, f)
 
 
-def _mtime(name: str):
-    p = os.path.join(TMP, name)
-    return os.path.getmtime(p) if os.path.exists(p) else None
-
-
 # ---- cold-start bootstrap ----------------------------------------------------
 _write_config()
 for _name in STATE_FILES:
@@ -90,22 +85,19 @@ from app import app  # noqa: E402
 from apig_wsgi import make_lambda_handler  # noqa: E402
 
 _wsgi = make_lambda_handler(app)
-_mtimes = {name: _mtime(name) for name in STATE_FILES}
 
 
 def _sync_up():
-    """Push any changed state file back to S3 (or delete if removed)."""
+    """Push state files back to S3 after every request.
+
+    Relying on mtime can miss updates that happen within the same second,
+    so we always upload the current local copy.
+    """
     for name in STATE_FILES:
-        current = _mtime(name)
-        if current == _mtimes.get(name):
-            continue
         path = os.path.join(TMP, name)
         try:
-            if current is None:
-                s3.delete_object(Bucket=_BUCKET, Key=name)
-            else:
+            if os.path.exists(path):
                 s3.upload_file(path, _BUCKET, name)
-            _mtimes[name] = current
         except ClientError as e:
             print(f"sync_up failed for {name}: {e}")
 
