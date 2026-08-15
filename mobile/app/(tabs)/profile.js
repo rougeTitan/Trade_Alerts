@@ -118,9 +118,7 @@ function PaymentTab({ c }) {
               <View style={[styles.statusDot, { backgroundColor: c.green }]} />
               <Text style={[styles.statusText, { color: c.green }]}>{row.status}</Text>
             </View>
-            <TouchableOpacity style={styles.thDownload}>
-              <Ionicons name="download-outline" size={16} color={c.accent} />
-            </TouchableOpacity>
+            <View style={styles.thDownload} />
           </View>
         ))}
       </View>
@@ -145,9 +143,6 @@ function SecurityTab({ c, onSignOutAll }) {
               <Text style={[styles.rowSub, { color: c.textSecondary }]}>Last changed 3 months ago</Text>
             </View>
           </View>
-          <TouchableOpacity style={[styles.smallBtn, { borderColor: c.accent }]}>
-            <Text style={[styles.smallBtnText, { color: c.accent }]}>Change</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -280,12 +275,7 @@ export default function ProfileScreen() {
           <Text style={[styles.userEmail, { color: c.textSecondary }]}>
             {user?.email || 'Not signed in'}
           </Text>
-          {isAuthenticated ? (
-            <TouchableOpacity style={[styles.editProfileBtn, { borderColor: c.accent }]}>
-              <Ionicons name="create-outline" size={14} color={c.accent} />
-              <Text style={[styles.editProfileText, { color: c.accent }]}>Edit Profile</Text>
-            </TouchableOpacity>
-          ) : (
+          {!isAuthenticated && (
             <TouchableOpacity onPress={() => login()} style={[styles.editProfileBtn, { backgroundColor: c.accent, borderColor: c.accent }]}>
               <Ionicons name="log-in-outline" size={14} color="#fff" />
               <Text style={[styles.editProfileText, { color: '#fff' }]}>Sign In (Demo)</Text>
