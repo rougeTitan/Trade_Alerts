@@ -152,10 +152,14 @@ export default function BulkEditScreen() {
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={c.text} />
+        <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard')} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={20} color={c.text} />
+          <Text style={[styles.backText, { color: c.text }]}>Back</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: c.text }]}>Bulk Edit Targets</Text>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard')} style={styles.doneBtn}>
+          <Text style={[styles.backText, { color: c.accent }]}>Done</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={[styles.toolbar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
@@ -207,12 +211,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
-  backBtn: { marginRight: 12 },
-  headerTitle: { fontSize: 20, fontWeight: '700' },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  backText: { fontSize: 16, fontWeight: '600' },
+  doneBtn: { padding: 4 },
+  headerTitle: { fontSize: 20, fontWeight: '700', flex: 1, textAlign: 'center' },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
