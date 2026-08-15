@@ -13,95 +13,50 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../src/theme/ThemeContext';
 import api from '../src/services/api';
 
-function EditableRow({ stock, onSave, onCancel, colors }) {
-  const [t1, setT1] = useState(stock.targets[0]?.price || '');
-  const [t2, setT2] = useState(stock.targets[1]?.price || '');
-  const [t3, setT3] = useState(stock.targets[2]?.price || '');
-  const [hasChanges, setHasChanges] = useState(false);
-
-  useEffect(() => {
-    const orig1 = stock.targets[0]?.price || '';
-    const orig2 = stock.targets[1]?.price || '';
-    const orig3 = stock.targets[2]?.price || '';
-    setHasChanges(t1 !== orig1 || t2 !== orig2 || t3 !== orig3);
-  }, [t1, t2, t3]);
-
-  const handleSave = () => {
-    const targets = [];
-    if (t1) targets.push({ price: parseFloat(t1), direction: stock.targets[0]?.direction || 'ABOVE' });
-    if (t2) targets.push({ price: parseFloat(t2), direction: stock.targets[1]?.direction || 'ABOVE' });
-    if (t3) targets.push({ price: parseFloat(t3), direction: stock.targets[2]?.direction || 'ABOVE' });
-    onSave(stock.ticker, stock.sector, targets);
-  };
-
-  return (
-    <View style={[styles.row, styles.editRow, { backgroundColor: colors.accent + '10', borderColor: colors.accent }]}>
-      <Text style={[styles.cell, styles.symbolCell, { color: colors.text }]}>{stock.ticker}</Text>
-      <Text style={[styles.cell, styles.priceCell, { color: colors.text }]}>${stock.current_price?.toFixed(2) || '—'}</Text>
-      <TextInput
-        style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-        value={t1}
-        onChangeText={setT1}
-        keyboardType="numeric"
-        placeholder="—"
-        placeholderTextColor={colors.textSecondary}
-      />
-      <TextInput
-        style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-        value={t2}
-        onChangeText={setT2}
-        keyboardType="numeric"
-        placeholder="—"
-        placeholderTextColor={colors.textSecondary}
-      />
-      <TextInput
-        style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-        value={t3}
-        onChangeText={setT3}
-        keyboardType="numeric"
-        placeholder="—"
-        placeholderTextColor={colors.textSecondary}
-      />
-      <Text style={[styles.cell, styles.sectorCell, { color: colors.textSecondary }]}>{stock.sector}</Text>
-      <View style={styles.actionsCell}>
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={!hasChanges}
-          style={[styles.iconBtn, { opacity: hasChanges ? 1 : 0.3 }]}
-        >
-          <Ionicons name="checkmark" size={18} color={colors.green} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={onCancel} style={styles.iconBtn}>
-          <Ionicons name="close" size={18} color={colors.red} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function ReadOnlyRow({ stock, onEdit, colors }) {
+function StockRow({ stock, editing, onStartEdit, onFinish, onChangeDraft, colors }) {
   return (
     <View style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.cell, styles.symbolCell, { color: colors.text, fontWeight: '700' }]}>{stock.ticker}</Text>
       <Text style={[styles.cell, styles.priceCell, { color: colors.text }]}>${stock.current_price?.toFixed(2) || '—'}</Text>
-      <Text style={[styles.cell, styles.targetCell, { color: colors.textSecondary }]}>
-        {stock.targets[0]?.price ? `$${stock.targets[0].price}` : '—'}
-      </Text>
-      <Text style={[styles.cell, styles.targetCell, { color: colors.textSecondary }]}>
-        {stock.targets[1]?.price ? `$${stock.targets[1].price}` : '—'}
-      </Text>
-      <Text style={[styles.cell, styles.targetCell, { color: colors.textSecondary }]}>
-        {stock.targets[2]?.price ? `$${stock.targets[2].price}` : '—'}
-      </Text>
+
+      {[0, 1, 2].map((idx) => {
+        const target = stock.targets[idx];
+        const isEditing = editing?.ticker === stock.ticker && editing?.idx === idx;
+        if (isEditing) {
+          return (
+            <TextInput
+              key={idx}
+              style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+              value={editing.value}
+              onChangeText={onChangeDraft}
+              onBlur={() => onFinish(stock, idx)}
+              onSubmitEditing={() => onFinish(stock, idx)}
+              keyboardType="numeric"
+              autoFocus
+              selectTextOnFocus
+              placeholder="—"
+              placeholderTextColor={colors.textSecondary}
+            />
+          );
+        }
+        return (
+          <TouchableOpacity
+            key={idx}
+            style={[styles.cell, styles.targetCell]}
+            onPress={() => onStartEdit(stock, idx)}
+          >
+            <Text style={{ color: target ? colors.text : colors.textSecondary, fontSize: 13 }}>
+              {target ? `$${target.price}` : '—'}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+
       <Text style={[styles.cell, styles.sectorCell, { color: colors.textSecondary, fontSize: 12 }]}>{stock.sector}</Text>
-      <View style={styles.actionsCell}>
-        <TouchableOpacity onPress={() => onEdit(stock)} style={styles.iconBtn}>
-          <Ionicons name="pencil" size={16} color={colors.accent} />
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
+
 
 export default function BulkEditScreen() {
   const router = useRouter();
@@ -111,7 +66,7 @@ export default function BulkEditScreen() {
   const [stocks, setStocks] = useState([]);
   const [filteredStocks, setFilteredStocks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingTicker, setEditingTicker] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -144,22 +99,44 @@ export default function BulkEditScreen() {
     }
   };
 
-  const handleEdit = (stock) => {
-    setEditingTicker(stock.ticker);
+  const startEdit = (stock, idx) => {
+    if (editing && editing.ticker === stock.ticker && editing.idx === idx) return;
+    if (editing) {
+      const prev = stocks.find((s) => s.ticker === editing.ticker && s.sector === editing.sector);
+      if (prev) finishEditing(prev, editing.idx);
+    }
+    const value = stock.targets[idx]?.price != null ? String(stock.targets[idx].price) : '';
+    setEditing({ ticker: stock.ticker, sector: stock.sector, idx, value });
   };
 
-  const handleSave = async (ticker, sector, targets) => {
+  const updateDraft = (value) => setEditing({ ...editing, value });
+
+  const finishEditing = async (stock, idx) => {
+    if (!editing || editing.ticker !== stock.ticker || editing.idx !== idx) return;
+    const { value } = editing;
+    const orig = stock.targets[idx]?.price != null ? String(stock.targets[idx].price) : '';
+    if (value === orig) {
+      setEditing(null);
+      return;
+    }
+    const trimmed = value.trim();
+    const newTargets = [0, 1, 2].map((i) => {
+      if (i === idx) {
+        if (trimmed === '') return null;
+        const price = parseFloat(trimmed);
+        if (isNaN(price)) return null;
+        const base = stock.targets[i] || {};
+        return { ...base, price };
+      }
+      return stock.targets[i] || null;
+    });
+    setEditing(null);
     try {
-      await api.setTargets(ticker, sector, targets);
-      setEditingTicker(null);
+      await api.setTargets(stock.ticker, stock.sector, newTargets);
       await loadStocks();
     } catch (e) {
       console.warn('Save failed:', e.message);
     }
-  };
-
-  const handleCancel = () => {
-    setEditingTicker(null);
   };
 
   if (loading) {
@@ -204,29 +181,21 @@ export default function BulkEditScreen() {
         <Text style={[styles.headerCell, styles.targetCell, { color: c.textSecondary }]}>Target 2</Text>
         <Text style={[styles.headerCell, styles.targetCell, { color: c.textSecondary }]}>Target 3</Text>
         <Text style={[styles.headerCell, styles.sectorCell, { color: c.textSecondary }]}>Sector</Text>
-        <Text style={[styles.headerCell, styles.actionsCell, { color: c.textSecondary }]}>Actions</Text>
+        <View style={styles.actionsCell} />
       </View>
 
       <ScrollView style={styles.table}>
-        {filteredStocks.map((stock) => {
-          const isEditing = editingTicker === stock.ticker;
-          return isEditing ? (
-            <EditableRow
-              key={stock.ticker}
-              stock={stock}
-              onSave={handleSave}
-              onCancel={handleCancel}
-              colors={c}
-            />
-          ) : (
-            <ReadOnlyRow
-              key={stock.ticker}
-              stock={stock}
-              onEdit={handleEdit}
-              colors={c}
-            />
-          );
-        })}
+        {filteredStocks.map((stock) => (
+          <StockRow
+            key={`${stock.sector}-${stock.ticker}`}
+            stock={stock}
+            editing={editing}
+            onStartEdit={startEdit}
+            onFinish={finishEditing}
+            onChangeDraft={updateDraft}
+            colors={c}
+          />
+        ))}
       </ScrollView>
     </View>
   );

@@ -107,6 +107,8 @@ def _set_targets(ticker: str, sector: str, targets: list):
                 # Write new targets (up to 3)
                 col_pairs = [("D", "E"), ("F", "G"), ("H", "I")]
                 for i, t in enumerate(targets[:3]):
+                    if not t:
+                        continue
                     price_col, dir_col = col_pairs[i]
                     ws[f"{price_col}{row}"] = t["price"]
                     ws[f"{dir_col}{row}"] = t.get("direction", "BOTH")
