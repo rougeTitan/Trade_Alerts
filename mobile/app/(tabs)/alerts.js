@@ -282,8 +282,21 @@ export default function AlertsScreen() {
     );
   }
 
-  const numColumns = width > 900 ? 3 : width > 550 ? 2 : 1;
+  const numColumns = width > 1300 ? 4 : width > 900 ? 3 : width > 550 ? 2 : 1;
   const triggeredCount = groupedAlerts.reduce((sum, a) => sum + (a.targets?.length || 0), 0);
+
+  // Pad the last row with invisible spacers so cards keep an even width and
+  // don't stretch to fill leftover space (which caused uneven gaps).
+  const gridData = React.useMemo(() => {
+    if (numColumns <= 1 || filteredAlerts.length === 0) return filteredAlerts;
+    const remainder = filteredAlerts.length % numColumns;
+    if (remainder === 0) return filteredAlerts;
+    const fillers = Array.from({ length: numColumns - remainder }, (_, i) => ({
+      __placeholder: true,
+      id: `__ph-${i}`,
+    }));
+    return [...filteredAlerts, ...fillers];
+  }, [filteredAlerts, numColumns]);
 
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
@@ -348,17 +361,22 @@ export default function AlertsScreen() {
 
       {/* Cards Grid */}
       <FlatList
-        data={filteredAlerts}
+        data={gridData}
         key={numColumns}
         numColumns={numColumns}
-        keyExtractor={(item) => `${item.ticker}-${item.direction}`}
-        renderItem={({ item }) => (
-          <AlertCard
-            alert={item}
-            colors={c}
-            onDismiss={() => handleDismissAlert(item.ticker, item.direction)}
-          />
-        )}
+        keyExtractor={(item) => (item.__placeholder ? item.id : `${item.ticker}-${item.direction}`)}
+        renderItem={({ item }) => {
+          if (item.__placeholder) {
+            return <View style={styles.cardWrapper} />;
+          }
+          return (
+            <AlertCard
+              alert={item}
+              colors={c}
+              onDismiss={() => handleDismissAlert(item.ticker, item.direction)}
+            />
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <View style={[styles.emptyBell, { backgroundColor: c.accent + '15' }]}>
@@ -456,7 +474,7 @@ const styles = StyleSheet.create({
 
   // Grid
   gridContent: { padding: 12 },
-  gridRow: { gap: 12, paddingHorizontal: 0 },
+  gridRow: { gap: 12 },
 
   // Empty state
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
@@ -482,7 +500,7 @@ const styles = StyleSheet.create({
   restoreText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   // Card
-  cardWrapper: { flex: 1, margin: 6, minWidth: 220, maxWidth: 420 },
+  cardWrapper: { flex: 1, minWidth: 0, marginBottom: 12 },
   card: {
     borderRadius: 16,
     borderWidth: 1,
