@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -318,22 +318,6 @@ export default function AlertsScreen() {
     loadAlerts();
   }, [loadAlerts]);
 
-  const numColumns = width > 1300 ? 4 : width > 900 ? 3 : width > 550 ? 2 : 1;
-
-  // Pad the last row with invisible spacers so cards keep an even width and
-  // don't stretch to fill leftover space (which caused uneven gaps).
-  // NOTE: hooks must run before any early return (Rules of Hooks).
-  const gridData = React.useMemo(() => {
-    if (numColumns <= 1 || filteredAlerts.length === 0) return filteredAlerts;
-    const remainder = filteredAlerts.length % numColumns;
-    if (remainder === 0) return filteredAlerts;
-    const fillers = Array.from({ length: numColumns - remainder }, (_, i) => ({
-      __placeholder: true,
-      id: `__ph-${i}`,
-    }));
-    return [...filteredAlerts, ...fillers];
-  }, [filteredAlerts, numColumns]);
-
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: c.background }]}>
@@ -344,7 +328,21 @@ export default function AlertsScreen() {
     );
   }
 
+  const numColumns = width > 1300 ? 4 : width > 900 ? 3 : width > 550 ? 2 : 1;
   const triggeredCount = groupedAlerts.reduce((sum, a) => sum + (a.targets?.length || 0), 0);
+
+  // Pad the last row with invisible spacers so cards keep an even width and
+  // don't stretch to fill leftover space (which caused uneven gaps).
+  const gridData = useMemo(() => {
+    if (numColumns <= 1 || filteredAlerts.length === 0) return filteredAlerts;
+    const remainder = filteredAlerts.length % numColumns;
+    if (remainder === 0) return filteredAlerts;
+    const fillers = Array.from({ length: numColumns - remainder }, (_, i) => ({
+      __placeholder: true,
+      id: `__ph-${i}`,
+    }));
+    return [...filteredAlerts, ...fillers];
+  }, [filteredAlerts, numColumns]);
 
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
