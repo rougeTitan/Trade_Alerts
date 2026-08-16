@@ -248,12 +248,9 @@ def api_add_stock():
     return jsonify({"ok": True})
 
 
-@app.delete("/api/sectors/stock")
-def api_remove_stock():
-    data = request.get_json(force=True)
-    sector = data.get("sector", "").strip()
-    ticker = data.get("ticker", "").strip().upper()
-
+def _remove_stock(sector: str, ticker: str):
+    sector = (sector or "").strip()
+    ticker = (ticker or "").strip().upper()
     sectors = _load_sectors()
     if sector in sectors and ticker in sectors[sector]:
         sectors[sector].remove(ticker)
@@ -261,6 +258,21 @@ def api_remove_stock():
             del sectors[sector]
         _save_sectors(sectors)
         _remove_ticker_from_excel(ticker, sector)
+
+
+@app.delete("/api/sectors/stock")
+def api_remove_stock():
+    """Body-based route (kept for backward compatibility)."""
+    data = request.get_json(force=True)
+    _remove_stock(data.get("sector", ""), data.get("ticker", ""))
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/sectors/<sector>/stock/<ticker>")
+def api_remove_stock_path(sector, ticker):
+    """Path-param route. DELETE requests with a body are unreliable through
+    CloudFront/OAC, so the client uses this instead."""
+    _remove_stock(sector, ticker)
     return jsonify({"ok": True})
 
 

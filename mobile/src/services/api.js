@@ -78,10 +78,10 @@ class ApiService {
   }
 
   removeStock(sector, ticker) {
-    return this._fetch('/api/sectors/stock', {
-      method: 'DELETE',
-      body: JSON.stringify({ sector, ticker }),
-    });
+    return this._fetch(
+      `/api/sectors/${encodeURIComponent(sector)}/stock/${encodeURIComponent(ticker)}`,
+      { method: 'DELETE' }
+    );
   }
 
   // ── Watchlist ────────────────────────────────────────
