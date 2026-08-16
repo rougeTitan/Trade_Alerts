@@ -148,44 +148,68 @@ export default function DashboardScreen() {
   };
 
   const handleAddStock = async (sector, ticker) => {
+    setAddStockModal(false);
+    const tk = (ticker || '').trim().toUpperCase();
+    // Optimistic: show the new card immediately (price/earnings fill in on reconcile).
+    setWatchlist((prev) => {
+      const existing = prev[sector] || [];
+      if (existing.some((s) => s.ticker === tk)) return prev;
+      return {
+        ...prev,
+        [sector]: [...existing, { ticker: tk, current_price: null, targets: [], earnings_date: null }],
+      };
+    });
     try {
       await api.addStock(sector, ticker);
-      setAddStockModal(false);
-      loadData();
     } catch (e) {
       console.warn('Add stock failed:', e.message);
     }
+    loadData(); // reconcile in background
   };
 
   const handleRemoveStock = async (ticker, sector) => {
+    // Optimistic: remove the card immediately.
+    setWatchlist((prev) => ({
+      ...prev,
+      [sector]: (prev[sector] || []).filter((s) => s.ticker !== ticker),
+    }));
     try {
       await api.removeStock(sector, ticker);
-      loadData();
     } catch (e) {
       console.warn('Remove stock failed:', e.message);
     }
+    loadData(); // reconcile in background
   };
 
   const handleAddSector = async (name) => {
+    setAddSectorModal(false);
+    // Optimistic: show the new (empty) sector immediately; getWatchlist is slow
+    // because it fetches earnings dates for every ticker.
+    setWatchlist((prev) => (prev[name] ? prev : { ...prev, [name]: [] }));
     try {
       await api.addSector(name);
-      setAddSectorModal(false);
-      loadData();
     } catch (e) {
       console.warn('Add sector failed:', e.message);
     }
+    loadData(); // reconcile in background
   };
 
   const handleDeleteSector = async (name) => {
+    // Optimistic: drop the sector from local state right away.
+    setWatchlist((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+    if (activeSector === name) {
+      setActiveSector('__all__');
+    }
     try {
       await api.deleteSector(name);
-      if (activeSector === name) {
-        setActiveSector('__all__');
-      }
-      loadData();
     } catch (e) {
       console.warn('Delete sector failed:', e.message);
     }
+    loadData(); // reconcile in background
   };
 
   // Build flat stock list based on active sector
