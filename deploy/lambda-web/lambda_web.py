@@ -87,25 +87,51 @@ from apig_wsgi import make_lambda_handler  # noqa: E402
 _wsgi = make_lambda_handler(app)
 
 
+def _sync_down():
+    """Pull the latest state from S3 into /tmp before handling a request.
+
+    Lambda keeps warm containers alive, and each container has its own /tmp.
+    Without refreshing before every request a warm container would operate on
+    a stale copy and, via _sync_up, clobber writes made by other containers
+    (e.g. a sector/stock added elsewhere would silently disappear).
+    """
+    for name in STATE_FILES:
+        path = os.path.join(TMP, name)
+        found = _download(name, path)
+        if not found and os.path.exists(path):
+            # File was deleted upstream (e.g. alerts cleared) -> drop stale local copy.
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 def _sync_up():
     """Push state files back to S3 after every request.
 
     Relying on mtime can miss updates that happen within the same second,
-    so we always upload the current local copy.
+    so we always upload the current local copy. Deletions are propagated too:
+    if a file no longer exists locally we remove it from S3.
     """
     for name in STATE_FILES:
         path = os.path.join(TMP, name)
         try:
             if os.path.exists(path):
                 s3.upload_file(path, _BUCKET, name)
+            else:
+                s3.delete_object(Bucket=_BUCKET, Key=name)
         except ClientError as e:
             print(f"sync_up failed for {name}: {e}")
 
 
 def handler(event, context):
+    try:
+        _sync_down()
+    except Exception as e:  # never fail the request because of a sync error
+        print(f"state sync-down error: {e}")
     response = _wsgi(event, context)
     try:
         _sync_up()
     except Exception as e:  # never fail the request because of a sync error
-        print(f"state sync error: {e}")
+        print(f"state sync-up error: {e}")
     return response
