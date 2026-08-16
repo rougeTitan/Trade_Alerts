@@ -318,21 +318,11 @@ export default function AlertsScreen() {
     loadAlerts();
   }, [loadAlerts]);
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: c.background }]}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={c.accent} />
-        </View>
-      </View>
-    );
-  }
-
   const numColumns = width > 1300 ? 4 : width > 900 ? 3 : width > 550 ? 2 : 1;
-  const triggeredCount = groupedAlerts.reduce((sum, a) => sum + (a.targets?.length || 0), 0);
 
   // Pad the last row with invisible spacers so cards keep an even width and
   // don't stretch to fill leftover space (which caused uneven gaps).
+  // NOTE: hooks must run before any early return (Rules of Hooks).
   const gridData = React.useMemo(() => {
     if (numColumns <= 1 || filteredAlerts.length === 0) return filteredAlerts;
     const remainder = filteredAlerts.length % numColumns;
@@ -343,6 +333,18 @@ export default function AlertsScreen() {
     }));
     return [...filteredAlerts, ...fillers];
   }, [filteredAlerts, numColumns]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.background }]}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={c.accent} />
+        </View>
+      </View>
+    );
+  }
+
+  const triggeredCount = groupedAlerts.reduce((sum, a) => sum + (a.targets?.length || 0), 0);
 
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
