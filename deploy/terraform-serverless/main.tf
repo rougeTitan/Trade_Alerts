@@ -34,8 +34,11 @@ locals {
     filesha1("${local.lambda_dir}/lambda_function.py"),
     filesha1("${local.lambda_dir}/Dockerfile"),
     filesha1("${local.lambda_dir}/requirements-lambda.txt"),
+    filesha1("${path.module}/${var.repo_root}/db.py"),
     filesha1("${path.module}/${var.repo_root}/monitor.py"),
+    filesha1("${path.module}/${var.repo_root}/monitor_v2.py"),
     filesha1("${path.module}/${var.repo_root}/notifier.py"),
+    filesha1("${path.module}/${var.repo_root}/notifier_ses.py"),
     filesha1("${path.module}/${var.repo_root}/price_fetcher.py"),
     filesha1("${path.module}/${var.repo_root}/excel_manager.py"),
   ]))
@@ -173,6 +176,27 @@ data "aws_iam_policy_document" "lambda_perms" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_secretsmanager_secret.email.arn]
   }
+  statement {
+    sid = "DynamoDB"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:DescribeTable",
+    ]
+    resources = [
+      aws_dynamodb_table.trade_alerts.arn,
+      "${aws_dynamodb_table.trade_alerts.arn}/index/*",
+    ]
+  }
+  statement {
+    sid       = "SES"
+    actions   = ["ses:SendEmail", "ses:SendRawEmail"]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda_perms" {
@@ -200,11 +224,13 @@ resource "aws_lambda_function" "checker" {
 
   environment {
     variables = {
-      STATE_BUCKET  = aws_s3_bucket.state.bucket
-      SECRET_ARN    = aws_secretsmanager_secret.email.arn
-      TIMEZONE      = var.timezone
-      WATCHLIST_KEY = "watchlist.xlsx"
-      ALERT_LOG_KEY = "alert_log.csv"
+      STATE_BUCKET   = aws_s3_bucket.state.bucket
+      SECRET_ARN     = aws_secretsmanager_secret.email.arn
+      TIMEZONE       = var.timezone
+      WATCHLIST_KEY  = "watchlist.xlsx"
+      ALERT_LOG_KEY  = "alert_log.csv"
+      DYNAMODB_TABLE = aws_dynamodb_table.trade_alerts.name
+      SES_SENDER     = var.ses_sender
     }
   }
 

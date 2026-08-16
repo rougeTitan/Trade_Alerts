@@ -2,11 +2,13 @@
 // Connects to the existing Flask backend
 
 import { Platform } from 'react-native';
+import { getIdToken, COGNITO_CONFIGURED } from '../auth/AuthContext';
 
 // Production: set EXPO_PUBLIC_API_URL (e.g. https://alerts.example.com) at build time.
 // Dev fallback: localhost; Android emulator uses 10.0.2.2.
 const DEFAULT_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${DEFAULT_HOST}:5001`;
+const USER_PREFIX = COGNITO_CONFIGURED ? '/api/v2' : '/api';
 
 class ApiService {
   constructor(baseUrl = BASE_URL) {
@@ -20,10 +22,14 @@ class ApiService {
   async _fetch(path, options = {}) {
     const url = `${this.baseUrl}${path}`;
     const body = options.body && typeof options.body === 'string' ? options.body : '';
+    const token = await getIdToken();
     const headers = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
+    if (token && token !== 'demo-token') {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     // CloudFront OAC + AWS_IAM Lambda function URLs require the payload hash
     // header for every request; otherwise unsigned requests fail with 403.
@@ -56,14 +62,14 @@ class ApiService {
   // ── Sectors ──────────────────────────────────────────
 
   addSector(name) {
-    return this._fetch('/api/sectors/add', {
+    return this._fetch(`${USER_PREFIX}/sectors`, {
       method: 'POST',
       body: JSON.stringify({ sector: name }),
     });
   }
 
   deleteSector(name) {
-    return this._fetch(`/api/sectors/${encodeURIComponent(name)}`, {
+    return this._fetch(`${USER_PREFIX}/sectors/${encodeURIComponent(name)}`, {
       method: 'DELETE',
     });
   }
@@ -71,7 +77,7 @@ class ApiService {
   // ── Stocks ───────────────────────────────────────────
 
   addStock(sector, ticker) {
-    return this._fetch('/api/sectors/stock', {
+    return this._fetch(`${USER_PREFIX}/stocks`, {
       method: 'POST',
       body: JSON.stringify({ sector, ticker }),
     });
@@ -79,7 +85,7 @@ class ApiService {
 
   removeStock(sector, ticker) {
     return this._fetch(
-      `/api/sectors/${encodeURIComponent(sector)}/stock/${encodeURIComponent(ticker)}`,
+      `${USER_PREFIX}/stocks/${encodeURIComponent(sector)}/${encodeURIComponent(ticker)}`,
       { method: 'DELETE' }
     );
   }
@@ -87,13 +93,13 @@ class ApiService {
   // ── Watchlist ────────────────────────────────────────
 
   getWatchlist() {
-    return this._fetch('/api/watchlist');
+    return this._fetch(`${USER_PREFIX}/watchlist`);
   }
 
   // ── Targets ──────────────────────────────────────────
 
   setTargets(ticker, sector, targets) {
-    return this._fetch('/api/targets', {
+    return this._fetch(`${USER_PREFIX}/targets`, {
       method: 'POST',
       body: JSON.stringify({ ticker, sector, targets }),
     });
@@ -102,21 +108,21 @@ class ApiService {
   // ── Prices ───────────────────────────────────────────
 
   refreshPrices() {
-    return this._fetch('/api/prices/refresh');
+    return this._fetch(`${USER_PREFIX}/prices/refresh`);
   }
 
   // ── Alerts ───────────────────────────────────────────
 
   getAlerts() {
-    return this._fetch('/api/alerts');
+    return this._fetch(`${USER_PREFIX}/alerts`);
   }
 
   clearAlerts() {
-    return this._fetch('/api/alerts', { method: 'DELETE' });
+    return this._fetch(`${USER_PREFIX}/alerts`, { method: 'DELETE' });
   }
 
   dismissAlert(ticker, direction) {
-    return this._fetch(`/api/alerts/${encodeURIComponent(ticker)}/${encodeURIComponent(direction)}`, {
+    return this._fetch(`${USER_PREFIX}/alerts/${encodeURIComponent(ticker)}/${encodeURIComponent(direction)}`, {
       method: 'DELETE',
     });
   }

@@ -8,7 +8,7 @@ COPY deploy/lambda/requirements-lambda.txt ./
 RUN pip install --no-cache-dir -r requirements-lambda.txt
 
 # Application modules used by the handler.
-COPY price_fetcher.py monitor.py notifier.py excel_manager.py ./
+COPY price_fetcher.py monitor.py monitor_v2.py notifier.py notifier_ses.py excel_manager.py db.py ./
 
 # Lambda handler.
 COPY deploy/lambda/lambda_function.py ./

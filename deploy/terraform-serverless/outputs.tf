@@ -30,3 +30,28 @@ output "schedules" {
     afternoon = "${aws_scheduler_schedule.afternoon.name} @ ${var.afternoon_cron} (${var.timezone})"
   }
 }
+
+output "cognito_region" {
+  description = "Cognito User Pool region."
+  value       = var.region
+}
+
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID for mobile client."
+  value       = aws_cognito_user_pool.users.id
+}
+
+output "cognito_client_id" {
+  description = "Cognito User Pool Client ID for mobile app."
+  value       = aws_cognito_user_pool_client.mobile.id
+}
+
+output "dynamodb_table_name" {
+  description = "DynamoDB table name for tenant data."
+  value       = aws_dynamodb_table.trade_alerts.name
+}
+
+output "dynamodb_table_arn" {
+  description = "DynamoDB table ARN for IAM policies."
+  value       = aws_dynamodb_table.trade_alerts.arn
+}

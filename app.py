@@ -653,6 +653,13 @@ if os.environ.get("AUTO_START_MONITOR", "1") == "1":
     _auto_start_monitoring()
 
 
+# Multi-user v2 API — only loaded when DynamoDB + Cognito are configured.
+# Keeps the legacy /api routes alive for local dev without AWS.
+if os.environ.get("DYNAMODB_TABLE"):
+    from api_v2 import api_v2
+    app.register_blueprint(api_v2, url_prefix="/api/v2")
+
+
 if __name__ == "__main__":
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "5000"))

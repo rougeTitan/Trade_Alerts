@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -250,9 +251,10 @@ function NotificationsTab({ c, isDark, toggleTheme }) {
 }
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { theme, isDark, toggleTheme } = useTheme();
   const c = theme.colors;
-  const { user, isAuthenticated, login, logout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState('payment');
 
@@ -276,9 +278,9 @@ export default function ProfileScreen() {
             {user?.email || 'Not signed in'}
           </Text>
           {!isAuthenticated && (
-            <TouchableOpacity onPress={() => login()} style={[styles.editProfileBtn, { backgroundColor: c.accent, borderColor: c.accent }]}>
+            <TouchableOpacity onPress={() => router.push('/login')} style={[styles.editProfileBtn, { backgroundColor: c.accent, borderColor: c.accent }]}>
               <Ionicons name="log-in-outline" size={14} color="#fff" />
-              <Text style={[styles.editProfileText, { color: '#fff' }]}>Sign In (Demo)</Text>
+              <Text style={[styles.editProfileText, { color: '#fff' }]}>Sign In / Create Account</Text>
             </TouchableOpacity>
           )}
         </View>

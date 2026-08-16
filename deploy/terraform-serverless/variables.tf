@@ -68,3 +68,9 @@ variable "repo_root" {
   type        = string
   default     = "../.."
 }
+
+variable "ses_sender" {
+  description = "Verified SES email identity to send alerts from. Empty disables email."
+  type        = string
+  default     = ""
+}

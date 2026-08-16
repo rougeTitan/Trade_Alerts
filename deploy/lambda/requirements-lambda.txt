@@ -2,3 +2,6 @@ yfinance>=0.2.31
 openpyxl>=3.1.2
 pytz>=2023.3
 requests>=2.31.0
+boto3>=1.28.0
+PyJWT[crypto]>=2.8.0
+cryptography>=3.0.0

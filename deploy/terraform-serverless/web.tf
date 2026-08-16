@@ -12,6 +12,9 @@ locals {
     filesha1("${local.web_dir}/Dockerfile"),
     filesha1("${local.web_dir}/requirements-web.txt"),
     filesha1("${path.module}/${var.repo_root}/app.py"),
+    filesha1("${path.module}/${var.repo_root}/api_v2.py"),
+    filesha1("${path.module}/${var.repo_root}/auth.py"),
+    filesha1("${path.module}/${var.repo_root}/db.py"),
     filesha1("${path.module}/${var.repo_root}/monitor.py"),
     filesha1("${path.module}/${var.repo_root}/notifier.py"),
     filesha1("${path.module}/${var.repo_root}/price_fetcher.py"),
@@ -80,6 +83,10 @@ resource "aws_lambda_function" "web" {
       SECRET_ARN         = aws_secretsmanager_secret.email.arn
       TIMEZONE           = var.timezone
       AUTO_START_MONITOR = "0"
+      DYNAMODB_TABLE     = aws_dynamodb_table.trade_alerts.name
+      COGNITO_REGION     = var.region
+      COGNITO_POOL_ID    = aws_cognito_user_pool.users.id
+      COGNITO_CLIENT_ID  = aws_cognito_user_pool_client.mobile.id
     }
   }
 

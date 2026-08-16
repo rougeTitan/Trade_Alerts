@@ -183,6 +183,9 @@ jobs:
           echo "API_URL=$(terraform output -raw dashboard_url)" >> "$GITHUB_ENV"
           echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket)" >> "$GITHUB_ENV"
           echo "CF_ID=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_ENV"
+          echo "COGNITO_REGION=$(terraform output -raw cognito_region || echo us-east-1)" >> "$GITHUB_ENV"
+          echo "COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id)" >> "$GITHUB_ENV"
+          echo "COGNITO_CLIENT_ID=$(terraform output -raw cognito_client_id)" >> "$GITHUB_ENV"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -195,6 +198,9 @@ jobs:
         working-directory: mobile
         env:
           EXPO_PUBLIC_API_URL: ${{ env.API_URL }}
+          EXPO_PUBLIC_COGNITO_REGION: ${{ env.COGNITO_REGION }}
+          EXPO_PUBLIC_COGNITO_USER_POOL_ID: ${{ env.COGNITO_USER_POOL_ID }}
+          EXPO_PUBLIC_COGNITO_CLIENT_ID: ${{ env.COGNITO_CLIENT_ID }}
         run: |
           npm ci
           npx expo export -p web
