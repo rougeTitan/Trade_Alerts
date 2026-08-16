@@ -423,17 +423,48 @@ def api_refresh_prices():
     return jsonify(result)
 
 
+ALERT_MAX_AGE_DAYS = 14
+
+
+def _alert_age_days(timestamp: str):
+    """Age of an alert in days. Returns None if the timestamp can't be parsed
+    (so the row is kept rather than silently dropped)."""
+    if not timestamp:
+        return None
+    base = " ".join(str(timestamp).split(" ")[:2])  # drop trailing tz label
+    try:
+        dt = datetime.strptime(base, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    return (datetime.now() - dt).total_seconds() / 86400.0
+
+
 @app.get("/api/alerts")
 def api_get_alerts():
     config = _load_config()
     log_path = config["files"]["alert_log"]
     alerts = []
+    fieldnames = None
+    pruned = 0
     if os.path.exists(log_path):
-        with open(log_path, "r") as f:
+        with open(log_path, "r", newline="") as f:
             reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
             for row in reader:
+                age = _alert_age_days(row.get("timestamp"))
+                if age is not None and age > ALERT_MAX_AGE_DAYS:
+                    pruned += 1
+                    continue
                 alerts.append(row)
-    alerts.reverse()  # newest first
+
+    # Durably drop expired alerts from the log so they never reappear.
+    if pruned and fieldnames:
+        with open(log_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(alerts)
+
+    alerts = list(reversed(alerts))  # newest first
     return jsonify(alerts)
 
 

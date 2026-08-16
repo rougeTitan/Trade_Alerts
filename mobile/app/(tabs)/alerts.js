@@ -61,6 +61,41 @@ function PulsingZap({ color }) {
   );
 }
 
+const ALERT_MAX_AGE_DAYS = 14;
+
+// Timestamps look like "2026-08-15 15:00:00 EDT"; drop the tz label and parse
+// the local datetime (good enough for a day-granularity age).
+function parseAlertDate(ts) {
+  if (!ts) return null;
+  const base = String(ts).split(' ').slice(0, 2).join('T');
+  const d = new Date(base);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function daysSince(ts) {
+  const d = parseAlertDate(ts);
+  if (!d) return 0;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function formatTriggered(ts) {
+  const d = parseAlertDate(ts);
+  if (!d) return ts || '';
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function daysAgoLabel(n) {
+  if (n <= 0) return 'Today';
+  if (n === 1) return '1 day ago';
+  return `${n} days ago`;
+}
+
 function priorityFor(percent) {
   const abs = Math.abs(percent);
   if (abs < 1) return 'high';
@@ -149,15 +184,22 @@ function AlertCard({ alert, colors, onDismiss }) {
           )}
         </View>
 
-        {/* Footer: timestamp + triggered indicator */}
+        {/* Footer: triggered date/time + age */}
         <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
-          <Text style={[styles.timestamp, { color: colors.textSecondary }]} numberOfLines={1}>
-            {alert.latest?.split(' ')[1] || alert.latest}
-          </Text>
-          <View style={styles.triggeredRow}>
-            <PulsingZap color={colors.yellow} />
-            <Text style={[styles.triggeredText, { color: colors.yellow }]}>Triggered</Text>
+          <View style={styles.footerLeft}>
+            <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
+            <Text style={[styles.timestamp, { color: colors.textSecondary }]} numberOfLines={1}>
+              {formatTriggered(alert.latest)}
+            </Text>
           </View>
+          <View style={[styles.agePill, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
+            <Text style={[styles.ageText, { color: colors.textSecondary }]}>{daysAgoLabel(daysSince(alert.latest))}</Text>
+          </View>
+        </View>
+
+        <View style={styles.triggeredRow}>
+          <PulsingZap color={colors.yellow} />
+          <Text style={[styles.triggeredText, { color: colors.yellow }]}>Triggered</Text>
         </View>
 
         {/* Hover delete footer (web) */}
@@ -213,7 +255,11 @@ export default function AlertsScreen() {
         }
       });
 
-      setGroupedAlerts(Object.values(grouped));
+      // Drop alerts older than the retention window (backend prunes too).
+      const fresh = Object.values(grouped).filter(
+        (a) => daysSince(a.latest) <= ALERT_MAX_AGE_DAYS
+      );
+      setGroupedAlerts(fresh);
     } catch (e) {
       console.warn('Failed to load alerts:', e.message);
     } finally {
@@ -557,11 +603,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     borderTopWidth: 1,
     paddingTop: 10,
   },
-  timestamp: { fontSize: 11, fontWeight: '500', flex: 1 },
-  triggeredRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  timestamp: { fontSize: 11, fontWeight: '500', flexShrink: 1 },
+  agePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  ageText: { fontSize: 10, fontWeight: '700' },
+  triggeredRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
   triggeredText: { fontSize: 10, fontWeight: '700' },
 
   deleteFooter: {
