@@ -268,7 +268,7 @@ export default function AlertsScreen() {
     }
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let filtered = groupedAlerts;
     if (searchQuery) {
       filtered = filtered.filter(a => a.ticker?.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -318,16 +318,6 @@ export default function AlertsScreen() {
     loadAlerts();
   }, [loadAlerts]);
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: c.background }]}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={c.accent} />
-        </View>
-      </View>
-    );
-  }
-
   const numColumns = width > 1300 ? 4 : width > 900 ? 3 : width > 550 ? 2 : 1;
   const triggeredCount = groupedAlerts.reduce((sum, a) => sum + (a.targets?.length || 0), 0);
 
@@ -343,6 +333,16 @@ export default function AlertsScreen() {
     }));
     return [...filteredAlerts, ...fillers];
   }, [filteredAlerts, numColumns]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.background }]}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={c.accent} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
