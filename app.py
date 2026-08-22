@@ -563,7 +563,7 @@ UPLOAD_PAGE = """<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <p class="hint"><a href="/" style="color:#22c55e">← Back to dashboard</a></p>
+  <p class="hint"><a href="/dashboard" style="color:#22c55e">← Back to dashboard</a></p>
   <h1>Bulk Import</h1>
   <p class="hint">Upload a CSV or the legacy watchlist.xlsx. Each row becomes a stock in your profile.</p>
 
@@ -664,7 +664,7 @@ def _result_html(message, status, code=200):
   <div style="background:{bg};color:{color};padding:16px;border-radius:8px;margin-bottom:16px">
     <h2 style="margin:0">{icon} {message}</h2>
   </div>
-  <p><a href="/api/upload" style="color:#22c55e">Back</a> | <a href="/" style="color:#22c55e">Dashboard</a></p>
+  <p><a href="/api/upload" style="color:#22c55e">Back</a> | <a href="/dashboard" style="color:#22c55e">Dashboard</a></p>
 </body></html>""", code
 
 
