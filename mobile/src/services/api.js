@@ -15,8 +15,15 @@ class ApiService {
     this.baseUrl = baseUrl;
   }
 
-  uploadUrl() {
-    return `${this.baseUrl}/api/upload`;
+  async uploadUrl() {
+    if (!COGNITO_CONFIGURED) {
+      return `${this.baseUrl}/api/upload`;
+    }
+    const token = await getIdToken();
+    if (!token || token === 'demo-token') {
+      return `${this.baseUrl}/api/upload`;
+    }
+    return `${this.baseUrl}/api/upload?token=${encodeURIComponent(token)}`;
   }
 
   async _fetch(path, options = {}) {

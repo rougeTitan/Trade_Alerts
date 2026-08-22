@@ -5,13 +5,15 @@ Flask-based UI for managing watchlist, price targets, and monitoring.
 
 import os
 import csv
+import io
 import json
+import tempfile
 import threading
 import time
 from datetime import datetime
 
 import pytz
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, render_template_string, jsonify, request
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -546,35 +548,38 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trade Alerts - Upload</title>
+  <title>Trade Alerts - Bulk Import</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 520px; margin: 60px auto; padding: 0 20px; background: #0f172a; color: #e2e8f0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; background: #0f172a; color: #e2e8f0; }
     h1 { font-size: 24px; margin-bottom: 8px; }
-    p { color: #94a3b8; margin-bottom: 24px; }
+    p, li { color: #94a3b8; margin-bottom: 12px; }
     form { background: #1e293b; padding: 24px; border-radius: 12px; border: 1px solid #334155; }
     input[type="file"] { color: #e2e8f0; margin-bottom: 20px; }
     button { background: #22c55e; color: #fff; border: none; border-radius: 8px; padding: 12px 20px; font-weight: 600; cursor: pointer; }
     a { color: #22c55e; text-decoration: none; }
+    code { background: #334155; padding: 2px 6px; border-radius: 4px; color: #e2e8f0; }
+    pre { background: #1e293b; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; color: #e2e8f0; }
+    .hint { font-size: 14px; }
   </style>
 </head>
 <body>
-  <h1>Upload a file</h1>
-  <p class="hint">For regular use, add stocks in the dashboard. This upload is for seeding or backing up data.</p>
-  <p class="hint">Expected files:</p>
-  <ul>
-    <li><code>watchlist.xlsx</code> — workbook with one sheet per sector. Rows: <code>ticker | company | current price | target 1 | dir 1 | target 2 | dir 2 | target 3 | dir 3 | notes</code>.</li>
-    <li><code>sectors.json</code> — map sector names to ticker lists:
-      <pre style="background:#1e293b;padding:12px;border-radius:8px;overflow:auto">{
-  "Technology": ["AAPL", "MSFT"],
-  "Energy": ["XOM", "CVX"]
-}</pre>
-    </li>
-  </ul>
-  <p class="hint">Accepted: .xlsx, .json, .csv</p>
+  <h1>Bulk Import</h1>
+  <p class="hint">Upload a CSV or the legacy watchlist.xlsx. Each row becomes a stock in your profile.</p>
+
+  <p class="hint">CSV columns (header required):</p>
+  <pre>ticker,sector,current_price,target1,dir1,target2,dir2,target3,dir3</pre>
+  <p class="hint"><code>dir</code> = ABOVE, BELOW or BOTH. Leave blanks for missing targets or current price.</p>
+
+  <p class="hint">Example:</p>
+  <pre>ticker,sector,current_price,target1,dir1,target2,dir2,target3,dir3
+AAPL,Technology,150.00,160.00,ABOVE,140.00,BELOW,,
+MSFT,Technology,250.00,260.00,ABOVE,,,,</pre>
+
   <form action="/api/upload" method="post" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".xlsx,.json,.csv" required />
+    <input type="hidden" name="token" value="{{ token }}" />
+    <input type="file" name="file" accept=".csv,.xlsx" required />
     <br />
-    <button type="submit">Upload to S3</button>
+    <button type="submit">Import</button>
   </form>
 </body>
 </html>"""
@@ -582,8 +587,9 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 
 @app.route("/api/upload", methods=["GET", "POST"])
 def api_upload():
+    token = request.values.get("token", "")
     if request.method == "GET":
-        return UPLOAD_PAGE
+        return render_template_string(UPLOAD_PAGE, token=token)
 
     if "file" not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -596,40 +602,148 @@ def api_upload():
     if not filename:
         return jsonify({"error": "Invalid filename"}), 400
 
+    # Authenticated v2 bulk import -> DynamoDB
+    if token:
+        if not os.environ.get("DYNAMODB_TABLE"):
+            return jsonify({"error": "DynamoDB not configured"}), 503
+
+        try:
+            from auth import get_user_from_token
+            user = get_user_from_token(token)
+            if not user:
+                return _result_html("Invalid or expired token", "fail", 401)
+            user_id = user["user_id"]
+        except Exception as e:
+            return _result_html(f"Token check failed: {e}", "fail", 500)
+
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext not in ("csv", "xlsx"):
+            return _result_html("Only .csv and .xlsx are supported for import", "fail", 400)
+
+        try:
+            if ext == "csv":
+                added, skipped, errors = _bulk_import_csv(file, user_id)
+            else:
+                added, skipped, errors = _bulk_import_xlsx(file, user_id)
+        except Exception as e:
+            return _result_html(f"Import failed: {e}", "fail", 500)
+
+        message = f"Imported {added} stocks, skipped {skipped}."
+        if errors:
+            message += f" Errors ({len(errors)}): {'; '.join(errors[:5])}"
+        return _result_html(message, "ok" if not errors else "fail")
+
+    # Legacy unauthenticated upload -> S3 or local
     key = f"uploads/{int(time.time())}_{filename}"
     bucket = os.environ.get("STATE_BUCKET")
 
     if bucket:
         try:
             import boto3
-
             s3 = boto3.client("s3")
             s3.upload_fileobj(file, bucket, key)
-            return f"""<!DOCTYPE html>
-<html><body style="font-family:sans-serif;max-width:520px;margin:60px auto;background:#0f172a;color:#e2e8f0">
-  <h2>✅ Uploaded</h2>
-  <p>Stored as <code>s3://{bucket}/{key}</code></p>
-  <p><a href="/api/upload" style="color:#22c55e">Upload another</a></p>
-</body></html>"""
+            return _result_html(f"Stored as s3://{bucket}/{key}", "ok")
         except Exception as e:
-            return f"""<!DOCTYPE html>
-<html><body style="font-family:sans-serif;max-width:520px;margin:60px auto;background:#0f172a;color:#e2e8f0">
-  <h2>❌ Upload failed</h2>
-  <p>{e}</p>
-  <p><a href="/api/upload" style="color:#22c55e">Try again</a></p>
-</body></html>""", 500
+            return _result_html(f"Upload failed: {e}", "fail", 500)
 
-    # Local fallback: save to an uploads/ folder in DATA_DIR or project root
+    # Local fallback
     upload_dir = os.path.join(_data_dir or os.path.dirname(os.path.abspath(__file__)), "uploads")
     os.makedirs(upload_dir, exist_ok=True)
     path = os.path.join(upload_dir, os.path.basename(key))
     file.save(path)
+    return _result_html(f"Saved locally to {path}", "ok")
+
+
+def _result_html(message, status, code=200):
+    color = "#86efac" if status == "ok" else "#fca5a5"
+    bg = "#14532d" if status == "ok" else "#7f1d1d"
+    icon = "✅" if status == "ok" else "❌"
     return f"""<!DOCTYPE html>
-<html><body style="font-family:sans-serif;max-width:520px;margin:60px auto;">
-  <h2>✅ Saved locally</h2>
-  <p>{path}</p>
-  <p><a href="/api/upload">Upload another</a></p>
-</body></html>"""
+<html><body style="font-family:sans-serif;max-width:640px;margin:40px auto;background:#0f172a;color:#e2e8f0">
+  <div style="background:{bg};color:{color};padding:16px;border-radius:8px;margin-bottom:16px">
+    <h2 style="margin:0">{icon} {message}</h2>
+  </div>
+  <p><a href="/api/upload" style="color:#22c55e">Back</a></p>
+</body></html>""", code
+
+
+def _bulk_import_csv(file, user_id):
+    import db
+    reader = csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig"))
+    added = 0
+    skipped = 0
+    errors = []
+    for i, row in enumerate(reader, start=2):
+        ticker = (row.get("ticker") or "").strip().upper()
+        sector = (row.get("sector") or "").strip()
+        if not ticker or not sector:
+            skipped += 1
+            continue
+        try:
+            db.add_stock(user_id, sector, ticker)
+            targets = _parse_csv_targets(row)
+            if any(t is not None for t in targets):
+                db.set_targets(user_id, sector, ticker, targets)
+            current_price = (row.get("current_price") or "").strip()
+            if current_price:
+                db.set_stock_price(user_id, sector, ticker, float(current_price))
+            added += 1
+        except Exception as e:
+            errors.append(f"row {i}: {e}")
+    return added, skipped, errors
+
+
+def _parse_csv_targets(row):
+    targets = []
+    for pkey, dkey in [("target1", "dir1"), ("target2", "dir2"), ("target3", "dir3")]:
+        price = (row.get(pkey) or "").strip()
+        if not price:
+            targets.append(None)
+            continue
+        try:
+            p = float(price)
+            d = (row.get(dkey) or "BOTH").strip().upper() or "BOTH"
+            if d not in ("ABOVE", "BELOW", "BOTH"):
+                d = "BOTH"
+            targets.append({"price": p, "direction": d})
+        except ValueError:
+            targets.append(None)
+    return targets
+
+
+def _bulk_import_xlsx(file, user_id):
+    import db
+    from excel_manager import read_watchlist
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        file.save(tmp)
+        tmp_path = tmp.name
+    try:
+        rows = read_watchlist(tmp_path)
+    except Exception as e:
+        raise RuntimeError(f"Could not read xlsx: {e}")
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    added = 0
+    skipped = 0
+    errors = []
+    for item in rows:
+        ticker = (item.get("ticker") or "").strip().upper()
+        sector = (item.get("sector") or "").strip()
+        if not ticker or not sector:
+            skipped += 1
+            continue
+        try:
+            db.add_stock(user_id, sector, ticker)
+            targets = item.get("targets") or [None, None, None]
+            if any(t is not None for t in targets):
+                db.set_targets(user_id, sector, ticker, targets)
+            added += 1
+        except Exception as e:
+            errors.append(f"{ticker}: {e}")
+    return added, skipped, errors
 
 
 # ---------------------------------------------------------------------------

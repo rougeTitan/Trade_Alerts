@@ -281,7 +281,10 @@ export default function DashboardScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}
-          onPress={() => Linking.openURL(api.uploadUrl())}
+          onPress={async () => {
+            const url = await api.uploadUrl();
+            Linking.openURL(url);
+          }}
         >
           <Ionicons name="cloud-upload-outline" size={14} color={c.accent} />
           <Text style={[styles.actionBtnTextAlt, { color: c.accent }]}>Upload</Text>
