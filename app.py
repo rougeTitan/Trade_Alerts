@@ -559,9 +559,20 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Upload a file</h1>
-  <p>Selected files are dropped into the Trade Alerts S3 bucket under <code>uploads/</code>.</p>
+  <p class="hint">For regular use, add stocks in the dashboard. This upload is for seeding or backing up data.</p>
+  <p class="hint">Expected files:</p>
+  <ul>
+    <li><code>watchlist.xlsx</code> — workbook with one sheet per sector. Rows: <code>ticker | company | current price | target 1 | dir 1 | target 2 | dir 2 | target 3 | dir 3 | notes</code>.</li>
+    <li><code>sectors.json</code> — map sector names to ticker lists:
+      <pre style="background:#1e293b;padding:12px;border-radius:8px;overflow:auto">{
+  "Technology": ["AAPL", "MSFT"],
+  "Energy": ["XOM", "CVX"]
+}</pre>
+    </li>
+  </ul>
+  <p class="hint">Accepted: .xlsx, .json, .csv</p>
   <form action="/api/upload" method="post" enctype="multipart/form-data">
-    <input type="file" name="file" required />
+    <input type="file" name="file" accept=".xlsx,.json,.csv" required />
     <br />
     <button type="submit">Upload to S3</button>
   </form>
