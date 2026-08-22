@@ -8,7 +8,7 @@
 resource "aws_cognito_user_pool" "users" {
   name = "${var.project_name}-users"
 
-  alias_attributes = ["email"]
+  username_attributes = ["email"]
 
   auto_verified_attributes = ["email"]
 
@@ -37,13 +37,6 @@ resource "aws_cognito_user_pool" "users" {
 
   email_configuration {
     email_sending_account = "COGNITO_DEFAULT"
-  }
-
-  schema {
-    attribute_data_type = "String"
-    name                = "email"
-    required            = true
-    mutable             = true
   }
 
   schema {

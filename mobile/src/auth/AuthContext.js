@@ -125,7 +125,6 @@ export function AuthProvider({ children }) {
   const signUp = useCallback(async ({ email, password, name }) => {
     if (!COGNITO_CONFIGURED) throw new Error('Cognito not configured');
     const attrs = [
-      new CognitoUserAttribute({ Name: 'email', Value: email }),
       new CognitoUserAttribute({ Name: 'name', Value: name || email.split('@')[0] }),
     ];
     const result = await _promisify((cb) => pool.signUp(email, password, attrs, null, cb));
