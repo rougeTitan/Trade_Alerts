@@ -24,11 +24,6 @@ const BRAND_COLORS = {
   MC: '#eb001b',
 };
 
-const INITIAL_CARDS = [
-  { id: 'c1', brand: 'VISA', last4: '4242', exp: '08/27', default: true },
-  { id: 'c2', brand: 'MC', last4: '5555', exp: '11/26', default: false },
-];
-
 const BILLING = [
   { id: 'b1', date: 'Jun 01, 2026', amount: '$29.00', status: 'Paid' },
   { id: 'b2', date: 'May 01, 2026', amount: '$29.00', status: 'Paid' },
@@ -46,7 +41,17 @@ function SectionTitle({ children, color }) {
 }
 
 function PaymentTab({ c }) {
-  const [cards, setCards] = useState(INITIAL_CARDS);
+  const [cards, setCards] = useState([]);
+
+  const addCard = () => {
+    const brands = ['VISA', 'MC'];
+    const brand = brands[Math.floor(Math.random() * brands.length)];
+    const last4 = String(Math.floor(1000 + Math.random() * 9000));
+    setCards((prev) => [
+      ...prev,
+      { id: `c${Date.now()}`, brand, last4, exp: '01/29', default: false },
+    ]);
+  };
 
   const makeDefault = (id) => {
     setCards((prev) => prev.map((card) => ({ ...card, default: card.id === id })));
@@ -80,6 +85,15 @@ function PaymentTab({ c }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      <TouchableOpacity
+        onPress={addCard}
+        style={[styles.dashedBtn, { borderColor: c.border }]}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="add" size={18} color={c.accent} />
+        <Text style={[styles.dashedText, { color: c.accent }]}>Add Card</Text>
+      </TouchableOpacity>
 
       <SectionTitle color={c.textSecondary}>Billing History</SectionTitle>
       <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
