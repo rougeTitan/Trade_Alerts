@@ -7,7 +7,7 @@ import os
 from flask import Blueprint, request, g, jsonify
 
 import db
-from auth import require_auth
+from auth import require_auth, get_user_from_token
 from price_fetcher import fetch_prices, fetch_earnings_dates
 
 api_v2 = Blueprint("api_v2", __name__)
@@ -19,6 +19,42 @@ def _json_ok(**extra):
 
 def _req_json():
     return request.get_json(force=True) or {}
+
+
+# Demo watchlist shown to unauthenticated guests before they sign up.
+# These are not written to DynamoDB; they live only in the response.
+DEFAULT_SECTORS = ["Technology", "Healthcare", "Energy"]
+DEFAULT_STOCKS = [
+    ("Technology", "AAPL", [{"price": 220.0, "direction": "ABOVE"}, None, None]),
+    ("Technology", "MSFT", [{"price": 450.0, "direction": "ABOVE"}, None, None]),
+    ("Healthcare", "JNJ", [{"price": 170.0, "direction": "BELOW"}, None, None]),
+    ("Energy", "XOM", [{"price": 115.0, "direction": "ABOVE"}, None, None]),
+]
+
+
+def _bearer_token():
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return ""
+
+
+def _build_default_watchlist(prices=None, earnings=None):
+    out = {}
+    for sector, ticker, targets in DEFAULT_STOCKS:
+        out.setdefault(sector, [])
+        p = prices.get(ticker) if prices else None
+        out[sector].append({
+            "ticker": ticker,
+            "current_price": float(p) if p is not None else 0.0,
+            "targets": targets,
+            "earnings_date": earnings.get(ticker) if earnings else None,
+        })
+    return out
+
+
+def _default_tickers():
+    return [ticker for (_, ticker, _) in DEFAULT_STOCKS]
 
 
 def _targets_to_floats(targets):
@@ -38,9 +74,13 @@ def api_profile():
 
 
 @api_v2.get("/watchlist")
-@require_auth
 def api_get_watchlist():
-    return jsonify(db.get_watchlist(g.user_id))
+    token = _bearer_token()
+    if token:
+        user = get_user_from_token(token)
+        if user:
+            return jsonify(db.get_watchlist(user["user_id"]))
+    return jsonify(_build_default_watchlist())
 
 
 @api_v2.post("/sectors")
@@ -102,23 +142,32 @@ def api_set_targets():
 
 
 @api_v2.get("/prices/refresh")
-@require_auth
 def api_refresh_prices():
-    stocks = db.list_stocks(g.user_id)
-    tickers = [s["ticker"] for s in stocks if s.get("ticker")]
-    if not tickers:
-        return jsonify(db.get_watchlist(g.user_id))
+    token = _bearer_token()
+    if token:
+        user = get_user_from_token(token)
+        if user:
+            stocks = db.list_stocks(user["user_id"])
+            tickers = [s["ticker"] for s in stocks if s.get("ticker")]
+            if not tickers:
+                return jsonify(db.get_watchlist(user["user_id"]))
 
+            prices = fetch_prices(tickers)
+            earnings = fetch_earnings_dates(tickers)
+
+            for s in stocks:
+                t = s.get("ticker")
+                p = prices.get(t)
+                e = earnings.get(t)
+                if p is not None:
+                    db.update_prices_for_ticker(t, p, e)
+            return jsonify(db.get_watchlist(user["user_id"]))
+
+    # Guest demo mode: fetch live prices for the default tickers.
+    tickers = _default_tickers()
     prices = fetch_prices(tickers)
     earnings = fetch_earnings_dates(tickers)
-
-    for s in stocks:
-        t = s.get("ticker")
-        p = prices.get(t)
-        e = earnings.get(t)
-        if p is not None:
-            db.update_prices_for_ticker(t, p, e)
-    return jsonify(db.get_watchlist(g.user_id))
+    return jsonify(_build_default_watchlist(prices, earnings))
 
 
 @api_v2.get("/alerts")
