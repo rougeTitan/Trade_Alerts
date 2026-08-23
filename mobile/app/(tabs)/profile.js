@@ -199,18 +199,14 @@ function SecurityTab({ c, onSignOutAll }) {
 function NotificationsTab({ c, isDark, toggleTheme }) {
   const [toggles, setToggles] = useState({
     email: true,
-    push: false,
     sms: false,
-    marketing: false,
   });
 
   const set = (key) => (val) => setToggles((prev) => ({ ...prev, [key]: val }));
 
   const rows = [
     { key: 'email', label: 'Email', icon: 'mail-outline' },
-    { key: 'push', label: 'Push', icon: 'phone-portrait-outline' },
     { key: 'sms', label: 'SMS', icon: 'chatbox-outline' },
-    { key: 'marketing', label: 'Marketing', icon: 'megaphone-outline' },
   ];
 
   return (
