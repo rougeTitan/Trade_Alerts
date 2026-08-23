@@ -285,32 +285,35 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Tab bar */}
-        <View style={[styles.tabBar, { backgroundColor: c.surface, borderColor: c.border }]}>
-          {TABS.map((tab) => {
-            const active = activeTab === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                onPress={() => setActiveTab(tab.key)}
-                style={[styles.tab, active && { backgroundColor: c.accent }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name={tab.icon} size={15} color={active ? '#fff' : c.textSecondary} />
-                <Text style={[styles.tabText, { color: active ? '#fff' : c.textSecondary }]}>{tab.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* Tabs only for signed-in users */}
+        {isAuthenticated && (
+          <>
+            <View style={[styles.tabBar, { backgroundColor: c.surface, borderColor: c.border }]}>
+              {TABS.map((tab) => {
+                const active = activeTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    onPress={() => setActiveTab(tab.key)}
+                    style={[styles.tab, active && { backgroundColor: c.accent }]}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name={tab.icon} size={15} color={active ? '#fff' : c.textSecondary} />
+                    <Text style={[styles.tabText, { color: active ? '#fff' : c.textSecondary }]}>{tab.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
-        {/* Tab content */}
-        <View style={styles.tabContent}>
-          {activeTab === 'payment' && <PaymentTab c={c} />}
-          {activeTab === 'security' && <SecurityTab c={c} />}
-          {activeTab === 'notifications' && (
-            <NotificationsTab c={c} isDark={isDark} toggleTheme={toggleTheme} />
-          )}
-        </View>
+            <View style={styles.tabContent}>
+              {activeTab === 'payment' && <PaymentTab c={c} />}
+              {activeTab === 'security' && <SecurityTab c={c} />}
+              {activeTab === 'notifications' && (
+                <NotificationsTab c={c} isDark={isDark} toggleTheme={toggleTheme} />
+              )}
+            </View>
+          </>
+        )}
 
         {/* Sign out */}
         {isAuthenticated && (
