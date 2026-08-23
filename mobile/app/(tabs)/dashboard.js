@@ -226,7 +226,9 @@ export default function DashboardScreen() {
   const allStocks = [];
   for (const s of sectors) for (const st of watchlist[s] || []) allStocks.push(st);
   const totalStocks = allStocks.length;
-  const withTargets = allStocks.filter((s) => s.targets?.length > 0).length;
+  const withTargets = allStocks.filter((s) =>
+    (s.targets || []).some((t) => t && t.price != null)
+  ).length;
   const noTargets = totalStocks - withTargets;
 
   if (loading) {

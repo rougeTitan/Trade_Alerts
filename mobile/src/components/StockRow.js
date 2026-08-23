@@ -16,7 +16,10 @@ export default function StockRow({ ticker, price, targets, sector, earningsDate,
   const cardWidth = (screenWidth - padding - gap * (cols - 1)) / cols;
 
   const priceStr = price != null ? `$${price.toFixed(2)}` : '—';
-  
+
+  // Filter out empty target slots before rendering
+  const validTargets = (targets || []).filter((t) => t && t.price != null);
+
   // Format earnings date
   const formatEarningsDate = (dateStr) => {
     if (!dateStr) return null;
@@ -84,10 +87,10 @@ export default function StockRow({ ticker, price, targets, sector, earningsDate,
 
       {/* Targets */}
       <View style={styles.targetsRow}>
-        {targets.length === 0 ? (
+        {validTargets.length === 0 ? (
           <Text style={[styles.noTargets, { color: c.textSecondary }]}>No targets set</Text>
         ) : (
-          targets.map((t, i) => <TargetPill key={i} price={t.price} direction={t.direction} />)
+          validTargets.map((t, i) => <TargetPill key={i} price={t.price} direction={t.direction} />)
         )}
       </View>
 
