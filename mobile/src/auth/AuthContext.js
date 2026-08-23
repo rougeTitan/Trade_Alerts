@@ -41,6 +41,16 @@ export async function getIdToken() {
         resolve(cached);
         return;
       }
+      const claims = session.getIdToken().decodePayload();
+      const expectedIss = `https://${COGNITO_DOMAIN}`;
+      if (claims.iss !== expectedIss || claims.aud !== COGNITO_CLIENT_ID) {
+        console.warn('Cognito session does not match current pool, clearing');
+        current.signOut();
+        await AsyncStorage.removeItem(TOKEN_KEY);
+        await AsyncStorage.removeItem(AUTH_KEY);
+        resolve(null);
+        return;
+      }
       const token = session.getIdToken().getJwtToken();
       await AsyncStorage.setItem(TOKEN_KEY, token);
       resolve(token);
@@ -111,13 +121,23 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    current.getSession((err, session) => {
+    current.getSession(async (err, session) => {
       if (err || !session || !session.isValid()) {
         setLoading(false);
         return;
       }
       const idToken = session.getIdToken().getJwtToken();
       const claims = session.getIdToken().decodePayload();
+      const expectedIss = `https://${COGNITO_DOMAIN}`;
+      if (claims.iss !== expectedIss || claims.aud !== COGNITO_CLIENT_ID) {
+        console.warn('Cognito session does not match current pool, clearing');
+        current.signOut();
+        await AsyncStorage.removeItem(AUTH_KEY).catch(() => {});
+        await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       _setUserFromClaims(claims, idToken).finally(() => setLoading(false));
     });
   }, [_setUserFromClaims]);

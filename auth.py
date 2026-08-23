@@ -4,45 +4,31 @@ Supports ID tokens from the mobile app. Loads JWKS once and caches it.
 """
 
 import os
-import json
-import base64
-import urllib.request
 from functools import wraps
 from typing import Dict, Optional
 
 import jwt
+from jwt import PyJWKClient
 
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "")
 COGNITO_POOL_ID = os.environ.get("COGNITO_POOL_ID", "")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 
-_jwks_cache = None
+_jwks_client = None
 
 
 def _issuer():
     return f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_POOL_ID}"
 
 
-def _get_jwks():
-    global _jwks_cache
-    if _jwks_cache is not None:
-        return _jwks_cache
+def _get_jwks_client():
+    global _jwks_client
+    if _jwks_client is not None:
+        return _jwks_client
     if not COGNITO_REGION or not COGNITO_POOL_ID:
         raise RuntimeError("COGNITO_REGION and COGNITO_POOL_ID must be set")
-    url = f"{_issuer()}/.well-known/jwks.json"
-    with urllib.request.urlopen(url, timeout=10) as resp:
-        _jwks_cache = json.loads(resp.read())
-    return _jwks_cache
-
-
-def _get_public_key(token: str):
-    jwks = _get_jwks()
-    header = jwt.get_unverified_header(token)
-    kid = header.get("kid")
-    for key in jwks.get("keys", []):
-        if key.get("kid") == kid:
-            return key
-    raise jwt.InvalidTokenError("Signing key not found")
+    _jwks_client = PyJWKClient(f"{_issuer()}/.well-known/jwks.json")
+    return _jwks_client
 
 
 def verify_token(token: str) -> Dict:
@@ -50,10 +36,11 @@ def verify_token(token: str) -> Dict:
     if not COGNITO_REGION or not COGNITO_POOL_ID:
         raise RuntimeError("Cognito is not configured")
 
-    key = _get_public_key(token)
+    jwks_client = _get_jwks_client()
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
     claims = jwt.decode(
         token,
-        key,
+        signing_key.key,
         algorithms=["RS256"],
         issuer=_issuer(),
         audience=COGNITO_CLIENT_ID,
