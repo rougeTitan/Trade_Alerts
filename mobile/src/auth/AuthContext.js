@@ -32,13 +32,12 @@ const DEMO_USER = {
 
 export async function getIdToken() {
   if (!COGNITO_CONFIGURED) return 'demo-token';
-  const cached = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
   const current = pool.getCurrentUser();
-  if (!current) return cached;
+  if (!current) return null;
   return new Promise((resolve) => {
     current.getSession(async (err, session) => {
-      if (err || !session) {
-        resolve(cached);
+      if (err || !session || !session.isValid()) {
+        resolve(null);
         return;
       }
       const claims = session.getIdToken().decodePayload();

@@ -39,6 +39,21 @@ def _bearer_token():
     return ""
 
 
+def _token_user():
+    auth = request.headers.get("Authorization", "")
+    if not auth:
+        return None
+    if not auth.startswith("Bearer "):
+        raise RuntimeError("bad authorization header")
+    token = auth[7:].strip()
+    if not token:
+        raise RuntimeError("missing token")
+    user = get_user_from_token(token)
+    if not user:
+        raise RuntimeError("invalid token")
+    return user
+
+
 def _build_default_watchlist(prices=None, earnings=None):
     out = {}
     for sector, ticker, targets in DEFAULT_STOCKS:
@@ -75,11 +90,12 @@ def api_profile():
 
 @api_v2.get("/watchlist")
 def api_get_watchlist():
-    token = _bearer_token()
-    if token:
-        user = get_user_from_token(token)
-        if user:
-            return jsonify(db.get_watchlist(user["user_id"]))
+    try:
+        user = _token_user()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 401
+    if user:
+        return jsonify(db.get_watchlist(user["user_id"]))
     return jsonify(_build_default_watchlist())
 
 
@@ -143,25 +159,26 @@ def api_set_targets():
 
 @api_v2.get("/prices/refresh")
 def api_refresh_prices():
-    token = _bearer_token()
-    if token:
-        user = get_user_from_token(token)
-        if user:
-            stocks = db.list_stocks(user["user_id"])
-            tickers = [s["ticker"] for s in stocks if s.get("ticker")]
-            if not tickers:
-                return jsonify(db.get_watchlist(user["user_id"]))
-
-            prices = fetch_prices(tickers)
-            earnings = fetch_earnings_dates(tickers)
-
-            for s in stocks:
-                t = s.get("ticker")
-                p = prices.get(t)
-                e = earnings.get(t)
-                if p is not None:
-                    db.update_prices_for_ticker(t, p, e)
+    try:
+        user = _token_user()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 401
+    if user:
+        stocks = db.list_stocks(user["user_id"])
+        tickers = [s["ticker"] for s in stocks if s.get("ticker")]
+        if not tickers:
             return jsonify(db.get_watchlist(user["user_id"]))
+
+        prices = fetch_prices(tickers)
+        earnings = fetch_earnings_dates(tickers)
+
+        for s in stocks:
+            t = s.get("ticker")
+            p = prices.get(t)
+            e = earnings.get(t)
+            if p is not None:
+                db.update_prices_for_ticker(t, p, e)
+        return jsonify(db.get_watchlist(user["user_id"]))
 
     # Guest demo mode: fetch live prices for the default tickers.
     tickers = _default_tickers()
