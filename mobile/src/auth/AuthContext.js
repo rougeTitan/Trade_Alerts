@@ -9,6 +9,8 @@ import {
 
 const AUTH_KEY = '@trade_alerts_auth';
 const TOKEN_KEY = '@trade_alerts_token';
+const LOGIN_TIME_KEY = '@trade_alerts_login_time';
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const COGNITO_REGION = process.env.EXPO_PUBLIC_COGNITO_REGION || '';
 const COGNITO_POOL_ID = process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID || '';
@@ -34,6 +36,17 @@ export async function getIdToken() {
   if (!COGNITO_CONFIGURED) return 'demo-token';
   const current = pool.getCurrentUser();
   if (!current) return null;
+
+  const loginTime = await AsyncStorage.getItem(LOGIN_TIME_KEY);
+  if (loginTime && Date.now() - Number(loginTime) > SESSION_TTL_MS) {
+    console.warn('Session expired after 24 hours');
+    current.signOut();
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(AUTH_KEY);
+    await AsyncStorage.removeItem(LOGIN_TIME_KEY);
+    return null;
+  }
+
   return new Promise((resolve) => {
     current.getSession(async (err, session) => {
       if (err || !session || !session.isValid()) {
@@ -47,6 +60,7 @@ export async function getIdToken() {
         current.signOut();
         await AsyncStorage.removeItem(TOKEN_KEY);
         await AsyncStorage.removeItem(AUTH_KEY);
+        await AsyncStorage.removeItem(LOGIN_TIME_KEY);
         resolve(null);
         return;
       }
@@ -100,45 +114,57 @@ export function AuthProvider({ children }) {
     setUser(nextUser);
     await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(nextUser));
     if (token) await AsyncStorage.setItem(TOKEN_KEY, token);
+    await AsyncStorage.setItem(LOGIN_TIME_KEY, String(Date.now()));
     return nextUser;
   }, []);
 
   useEffect(() => {
-    if (!COGNITO_CONFIGURED) {
-      AsyncStorage.getItem(AUTH_KEY)
-        .then((saved) => {
-          if (saved) setUser(JSON.parse(saved));
-        })
-        .catch(() => {})
-        .finally(() => setLoading(false));
-      return;
-    }
-
-    const current = pool.getCurrentUser();
-    if (!current) {
-      setLoading(false);
-      return;
-    }
-
-    current.getSession(async (err, session) => {
-      if (err || !session || !session.isValid()) {
+    (async () => {
+      const loginTime = await AsyncStorage.getItem(LOGIN_TIME_KEY);
+      if (loginTime && Date.now() - Number(loginTime) > SESSION_TTL_MS) {
+        console.warn('Session expired after 24 hours');
+        await signOut();
         setLoading(false);
         return;
       }
-      const idToken = session.getIdToken().getJwtToken();
-      const claims = session.getIdToken().decodePayload();
-      const expectedIss = `https://${COGNITO_DOMAIN}`;
-      if (claims.iss !== expectedIss || claims.aud !== COGNITO_CLIENT_ID) {
-        console.warn('Cognito session does not match current pool, clearing');
-        current.signOut();
-        await AsyncStorage.removeItem(AUTH_KEY).catch(() => {});
-        await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
-        setUser(null);
+
+      if (!COGNITO_CONFIGURED) {
+        AsyncStorage.getItem(AUTH_KEY)
+          .then((saved) => {
+            if (saved) setUser(JSON.parse(saved));
+          })
+          .catch(() => {})
+          .finally(() => setLoading(false));
+        return;
+      }
+
+      const current = pool.getCurrentUser();
+      if (!current) {
         setLoading(false);
         return;
       }
-      _setUserFromClaims(claims, idToken).finally(() => setLoading(false));
-    });
+
+      current.getSession(async (err, session) => {
+        if (err || !session || !session.isValid()) {
+          setLoading(false);
+          return;
+        }
+        const idToken = session.getIdToken().getJwtToken();
+        const claims = session.getIdToken().decodePayload();
+        const expectedIss = `https://${COGNITO_DOMAIN}`;
+        if (claims.iss !== expectedIss || claims.aud !== COGNITO_CLIENT_ID) {
+          console.warn('Cognito session does not match current pool, clearing');
+          current.signOut();
+          await AsyncStorage.removeItem(AUTH_KEY).catch(() => {});
+          await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+          await AsyncStorage.removeItem(LOGIN_TIME_KEY).catch(() => {});
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+        _setUserFromClaims(claims, idToken).finally(() => setLoading(false));
+      });
+    })();
   }, [_setUserFromClaims]);
 
   const signUp = useCallback(async ({ email, password, name }) => {
@@ -188,6 +214,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     await AsyncStorage.removeItem(AUTH_KEY);
     await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(LOGIN_TIME_KEY);
   }, []);
 
   const login = useCallback(async (overrides = {}) => {

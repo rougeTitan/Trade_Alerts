@@ -62,6 +62,14 @@ resource "aws_cognito_user_pool_client" "mobile" {
     "ALLOW_USER_PASSWORD_AUTH",
   ]
 
+  id_token_validity     = 1
+  refresh_token_validity = 1
+
+  token_validity_units {
+    id_token      = "days"
+    refresh_token = "days"
+  }
+
   supported_identity_providers = ["COGNITO"]
 }
 
