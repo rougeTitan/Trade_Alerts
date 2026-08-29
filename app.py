@@ -581,98 +581,135 @@ MSFT,Technology,250.00,260.00,ABOVE,,,,</pre>
   <pre>NASDAQ:AAPL,NYSE:JPM,NYSE:XOM</pre>
   <p class="hint">Multiple TXT files can be selected. The exchange prefix (NASDAQ: etc.) is ignored.</p>
 
-  <form action="/api/upload" method="post" enctype="multipart/form-data">
-    <input type="hidden" name="token" value="{{ token }}" />
-    <input type="file" name="file" accept=".csv,.xlsx,.txt" multiple required />
+  <form onsubmit="return importFiles();">
+    <input type="hidden" id="token-input" name="token" value="{{ token }}" />
+    <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.txt" multiple required />
     <br />
     <button type="submit">Import</button>
   </form>
+
+  <script>
+    async function importFiles() {
+      const tokenInput = document.getElementById('token-input');
+      const fileInput = document.getElementById('file-input');
+      const token = tokenInput ? tokenInput.value : '';
+      const files = Array.from(fileInput.files);
+      if (!files.length) {
+        alert('Choose at least one file');
+        return false;
+      }
+      const fileData = await Promise.all(files.map(async (f) => ({
+        name: f.name,
+        content: await f.text(),
+      })));
+      const payload = JSON.stringify({ files: fileData });
+      const encoder = new TextEncoder();
+      const digest = await crypto.subtle.digest('SHA-256', encoder.encode(payload));
+      const hash = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Id-Token': token,
+            'x-amz-content-sha256': hash,
+          },
+          body: payload,
+        });
+        const html = await res.text();
+        document.body.innerHTML = html;
+      } catch (e) {
+        alert('Import failed: ' + e.message);
+      }
+      return false;
+    }
+  </script>
 </body>
 </html>"""
 
 
 @app.route("/api/upload", methods=["GET", "POST"])
 def api_upload():
-    token = request.values.get("token", "")
+    token = request.headers.get("X-Id-Token", "")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:].strip()
+    if not token:
+        token = request.values.get("token", "")
     if request.method == "GET":
         return render_template_string(UPLOAD_PAGE, token=token)
 
-    files = request.files.getlist("file")
-    if not files or any(f.filename == "" for f in files):
-        return _result_html("No file selected", "fail", 400)
+    if not token:
+        return _result_html("Missing token", "fail", 401)
 
-    # Authenticated v2 bulk import -> DynamoDB
-    if token:
-        if not os.environ.get("DYNAMODB_TABLE"):
-            return _result_html("DynamoDB not configured", "fail", 503)
+    if not os.environ.get("DYNAMODB_TABLE"):
+        return _result_html("DynamoDB not configured", "fail", 503)
+
+    try:
+        from auth import get_user_from_token
+        user = get_user_from_token(token)
+        if not user:
+            return _result_html("Invalid or expired token", "fail", 401)
+        user_id = user["user_id"]
+    except Exception as e:
+        return _result_html(f"Token check failed: {e}", "fail", 500)
+
+    total_added = 0
+    total_skipped = 0
+    all_errors = []
+    files = []
+
+    if request.is_json:
+        payload = request.get_json(force=True) or {}
+        for item in payload.get("files", []):
+            name = item.get("name", "")
+            content = item.get("content", "")
+            if not name:
+                all_errors.append("missing filename in JSON")
+                continue
+            files.append({"name": name, "content": content, "json": True})
+    else:
+        uploaded = request.files.getlist("file")
+        if not uploaded or any(f.filename == "" for f in uploaded):
+            return _result_html("No file selected", "fail", 400)
+        files = [{"name": f.filename, "file": f, "json": False} for f in uploaded]
+
+    for file in files:
+        filename = secure_filename(file["name"])
+        if not filename:
+            all_errors.append("invalid filename")
+            continue
+
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext not in ("csv", "xlsx", "txt"):
+            all_errors.append(f"{filename}: unsupported extension")
+            continue
 
         try:
-            from auth import get_user_from_token
-            user = get_user_from_token(token)
-            if not user:
-                return _result_html("Invalid or expired token", "fail", 401)
-            user_id = user["user_id"]
-        except Exception as e:
-            return _result_html(f"Token check failed: {e}", "fail", 500)
-
-        total_added = 0
-        total_skipped = 0
-        all_errors = []
-
-        for file in files:
-            filename = secure_filename(file.filename)
-            if not filename:
-                all_errors.append("invalid filename")
-                continue
-
-            ext = filename.rsplit(".", 1)[-1].lower()
-            if ext not in ("csv", "xlsx", "txt"):
-                all_errors.append(f"{filename}: unsupported extension")
-                continue
-
-            try:
-                if ext == "csv":
-                    added, skipped, errors = _bulk_import_csv(file, user_id)
-                elif ext == "txt":
-                    added, skipped, errors = _bulk_import_txt(file, filename, user_id)
+            if ext == "csv":
+                added, skipped, errors = _bulk_import_csv(file["file"], user_id)
+            elif ext == "txt":
+                if file.get("json"):
+                    added, skipped, errors = _bulk_import_txt_text(file["content"], filename, user_id)
                 else:
-                    added, skipped, errors = _bulk_import_xlsx(file, user_id)
-            except Exception as e:
-                all_errors.append(f"{filename}: {e}")
-                continue
-
-            total_added += added
-            total_skipped += skipped
-            all_errors.extend([f"{filename}: {e}" for e in errors])
-
-        message = f"Imported {total_added} stocks, skipped {total_skipped}."
-        if all_errors:
-            message += f" Errors ({len(all_errors)}): {'; '.join(all_errors[:5])}"
-        return _result_html(message, "ok" if not all_errors else "fail")
-
-    # Legacy unauthenticated upload -> S3 or local
-    if len(files) > 1:
-        return _result_html("Only one file can be uploaded without a token", "fail", 400)
-    file = files[0]
-    filename = secure_filename(file.filename)
-    key = f"uploads/{int(time.time())}_{filename}"
-    bucket = os.environ.get("STATE_BUCKET")
-
-    if bucket:
-        try:
-            import boto3
-            s3 = boto3.client("s3")
-            s3.upload_fileobj(file, bucket, key)
-            return _result_html(f"Stored as s3://{bucket}/{key}", "ok")
+                    added, skipped, errors = _bulk_import_txt(file["file"], filename, user_id)
+            else:
+                added, skipped, errors = _bulk_import_xlsx(file["file"], user_id)
         except Exception as e:
-            return _result_html(f"Upload failed: {e}", "fail", 500)
+            all_errors.append(f"{filename}: {e}")
+            continue
 
-    # Local fallback
-    upload_dir = os.path.join(_data_dir or os.path.dirname(os.path.abspath(__file__)), "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    path = os.path.join(upload_dir, os.path.basename(key))
-    file.save(path)
-    return _result_html(f"Saved locally to {path}", "ok")
+        total_added += added
+        total_skipped += skipped
+        all_errors.extend([f"{filename}: {e}" for e in errors])
+
+    message = f"Imported {total_added} stocks, skipped {total_skipped}."
+    if all_errors:
+        message += f" Errors ({len(all_errors)}): {'; '.join(all_errors[:5])}"
+    return _result_html(message, "ok" if not all_errors else "fail")
 
 
 def _result_html(message, status, code=200):
@@ -809,6 +846,11 @@ def _bulk_import_txt(file, filename, user_id):
         except Exception as e:
             errors.append(f"{ticker}: {e}")
     return added, skipped, errors
+
+def _bulk_import_txt_text(text, filename, user_id):
+    """Same as _bulk_import_txt but from an in-memory string."""
+    return _bulk_import_txt(io.BytesIO(text.encode("utf-8-sig")), filename, user_id)
+
 
 # ---------------------------------------------------------------------------
 # Auto-start monitoring

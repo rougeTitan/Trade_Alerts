@@ -32,22 +32,19 @@ DEFAULT_STOCKS = [
 ]
 
 
-def _bearer_token():
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[7:]
-    return ""
+def _id_token():
+    return request.headers.get("X-Id-Token", "")
 
 
 def _token_user():
-    auth = request.headers.get("Authorization", "")
-    if not auth:
-        return None
-    if not auth.startswith("Bearer "):
-        raise RuntimeError("bad authorization header")
-    token = auth[7:].strip()
+    token = request.headers.get("X-Id-Token", "")
+    # Fallback to legacy Authorization header for local/dev.
     if not token:
-        raise RuntimeError("missing token")
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:].strip()
+    if not token:
+        return None
     user = get_user_from_token(token)
     if not user:
         raise RuntimeError("invalid token")

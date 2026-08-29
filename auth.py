@@ -76,10 +76,12 @@ if _FLASK:
     def require_auth(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            auth_header = request.headers.get("Authorization", "")
-            if not auth_header.startswith("Bearer "):
-                return make_response(jsonify({"error": "missing token"}), 401)
-            token = auth_header.split(" ", 1)[1]
+            token = request.headers.get("X-Id-Token", "")
+            if not token:
+                auth_header = request.headers.get("Authorization", "")
+                if not auth_header.startswith("Bearer "):
+                    return make_response(jsonify({"error": "missing token"}), 401)
+                token = auth_header.split(" ", 1)[1]
             try:
                 user = get_user_from_token(token)
             except Exception as e:

@@ -35,7 +35,7 @@ class ApiService {
       ...options.headers,
     };
     if (token && token !== 'demo-token') {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers['X-Id-Token'] = token;
     }
 
     // CloudFront OAC + AWS_IAM Lambda function URLs require the payload hash
