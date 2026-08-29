@@ -4,6 +4,7 @@ Flask-based UI for managing watchlist, price targets, and monitoring.
 """
 
 import os
+import re
 import csv
 import io
 import json
@@ -565,7 +566,7 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 <body>
   <p class="hint"><a href="/dashboard" style="color:#22c55e">← Back to dashboard</a></p>
   <h1>Bulk Import</h1>
-  <p class="hint">Upload a CSV or the legacy watchlist.xlsx. Each row becomes a stock in your profile.</p>
+  <p class="hint">Upload CSV, XLSX, or TradingView TXT files. Each file becomes a sector, each line becomes a stock.</p>
 
   <p class="hint">CSV columns (header required):</p>
   <pre>ticker,sector,current_price,target1,dir1,target2,dir2,target3,dir3</pre>
@@ -576,9 +577,13 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 AAPL,Technology,150.00,160.00,ABOVE,140.00,BELOW,,
 MSFT,Technology,250.00,260.00,ABOVE,,,,</pre>
 
+  <p class="hint">TXT format (one file per sector, filename becomes the sector):</p>
+  <pre>NASDAQ:AAPL,NYSE:JPM,NYSE:XOM</pre>
+  <p class="hint">Multiple TXT files can be selected. The exchange prefix (NASDAQ: etc.) is ignored.</p>
+
   <form action="/api/upload" method="post" enctype="multipart/form-data">
     <input type="hidden" name="token" value="{{ token }}" />
-    <input type="file" name="file" accept=".csv,.xlsx" required />
+    <input type="file" name="file" accept=".csv,.xlsx,.txt" multiple required />
     <br />
     <button type="submit">Import</button>
   </form>
@@ -592,21 +597,14 @@ def api_upload():
     if request.method == "GET":
         return render_template_string(UPLOAD_PAGE, token=token)
 
-    if "file" not in request.files:
-        return jsonify({"error": "No file part"}), 400
-
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "No file selected"}), 400
-
-    filename = secure_filename(file.filename)
-    if not filename:
-        return jsonify({"error": "Invalid filename"}), 400
+    files = request.files.getlist("file")
+    if not files or any(f.filename == "" for f in files):
+        return _result_html("No file selected", "fail", 400)
 
     # Authenticated v2 bulk import -> DynamoDB
     if token:
         if not os.environ.get("DYNAMODB_TABLE"):
-            return jsonify({"error": "DynamoDB not configured"}), 503
+            return _result_html("DynamoDB not configured", "fail", 503)
 
         try:
             from auth import get_user_from_token
@@ -617,24 +615,46 @@ def api_upload():
         except Exception as e:
             return _result_html(f"Token check failed: {e}", "fail", 500)
 
-        ext = filename.rsplit(".", 1)[-1].lower()
-        if ext not in ("csv", "xlsx"):
-            return _result_html("Only .csv and .xlsx are supported for import", "fail", 400)
+        total_added = 0
+        total_skipped = 0
+        all_errors = []
 
-        try:
-            if ext == "csv":
-                added, skipped, errors = _bulk_import_csv(file, user_id)
-            else:
-                added, skipped, errors = _bulk_import_xlsx(file, user_id)
-        except Exception as e:
-            return _result_html(f"Import failed: {e}", "fail", 500)
+        for file in files:
+            filename = secure_filename(file.filename)
+            if not filename:
+                all_errors.append("invalid filename")
+                continue
 
-        message = f"Imported {added} stocks, skipped {skipped}."
-        if errors:
-            message += f" Errors ({len(errors)}): {'; '.join(errors[:5])}"
-        return _result_html(message, "ok" if not errors else "fail")
+            ext = filename.rsplit(".", 1)[-1].lower()
+            if ext not in ("csv", "xlsx", "txt"):
+                all_errors.append(f"{filename}: unsupported extension")
+                continue
+
+            try:
+                if ext == "csv":
+                    added, skipped, errors = _bulk_import_csv(file, user_id)
+                elif ext == "txt":
+                    added, skipped, errors = _bulk_import_txt(file, filename, user_id)
+                else:
+                    added, skipped, errors = _bulk_import_xlsx(file, user_id)
+            except Exception as e:
+                all_errors.append(f"{filename}: {e}")
+                continue
+
+            total_added += added
+            total_skipped += skipped
+            all_errors.extend([f"{filename}: {e}" for e in errors])
+
+        message = f"Imported {total_added} stocks, skipped {total_skipped}."
+        if all_errors:
+            message += f" Errors ({len(all_errors)}): {'; '.join(all_errors[:5])}"
+        return _result_html(message, "ok" if not all_errors else "fail")
 
     # Legacy unauthenticated upload -> S3 or local
+    if len(files) > 1:
+        return _result_html("Only one file can be uploaded without a token", "fail", 400)
+    file = files[0]
+    filename = secure_filename(file.filename)
     key = f"uploads/{int(time.time())}_{filename}"
     bucket = os.environ.get("STATE_BUCKET")
 
@@ -746,6 +766,49 @@ def _bulk_import_xlsx(file, user_id):
             errors.append(f"{ticker}: {e}")
     return added, skipped, errors
 
+
+def _clean_txt_sector(filename):
+    """Derive a clean sector name from a TradingView .txt filename."""
+    name = filename.rsplit(".", 1)[0]
+    name = re.sub(r"\bS[_&\s]*P(?:\s*500)?\b", "", name, flags=re.I)
+    name = re.sub(r"\bSector\b", "", name, flags=re.I)
+    name = re.sub(r"[_\s]+", " ", name).strip()
+    return name
+
+
+def _bulk_import_txt(file, filename, user_id):
+    import db
+    sector = _clean_txt_sector(filename)
+    if not sector:
+        raise RuntimeError("Could not determine sector from filename")
+
+    if sector not in db.list_sectors(user_id):
+        db.add_sector(user_id, sector)
+
+    text = io.TextIOWrapper(file, encoding="utf-8-sig").read()
+    tokens = re.split(r"[,\n\r]+", text)
+
+    added = 0
+    skipped = 0
+    errors = []
+    for raw in tokens:
+        raw = raw.strip()
+        if not raw:
+            continue
+        ticker = raw.split(":")[-1].strip().upper()
+        if not ticker:
+            skipped += 1
+            continue
+        if re.match(r"^[A-Z0-9\.\-]+$", ticker) is None:
+            errors.append(f"bad ticker {raw}")
+            continue
+        try:
+            if not db.get_stock(user_id, sector, ticker):
+                db.add_stock(user_id, sector, ticker)
+            added += 1
+        except Exception as e:
+            errors.append(f"{ticker}: {e}")
+    return added, skipped, errors
 
 # ---------------------------------------------------------------------------
 # Auto-start monitoring
