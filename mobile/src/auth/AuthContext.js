@@ -5,6 +5,7 @@ import {
   CognitoUserAttribute,
   CognitoUser,
   AuthenticationDetails,
+  CognitoIdToken,
 } from 'amazon-cognito-identity-js';
 
 const AUTH_KEY = '@trade_alerts_auth';
@@ -35,38 +36,60 @@ const DEMO_USER = {
 export async function getIdToken() {
   if (!COGNITO_CONFIGURED) return 'demo-token';
   const current = pool.getCurrentUser();
-  if (!current) return null;
 
   const loginTime = await AsyncStorage.getItem(LOGIN_TIME_KEY);
   if (loginTime && Date.now() - Number(loginTime) > SESSION_TTL_MS) {
     console.warn('Session expired after 24 hours');
-    current.signOut();
+    current?.signOut();
     await AsyncStorage.removeItem(TOKEN_KEY);
     await AsyncStorage.removeItem(AUTH_KEY);
     await AsyncStorage.removeItem(LOGIN_TIME_KEY);
     return null;
   }
 
+  const _cachedToken = async () => {
+    const cached = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
+    if (!cached) return null;
+    try {
+      const idToken = new CognitoIdToken({ IdToken: cached });
+      const claims = idToken.decodePayload();
+      if (!claims) return null;
+      const expectedIss = `https://${COGNITO_DOMAIN}`;
+      if (claims.iss !== expectedIss || claims.aud !== COGNITO_CLIENT_ID) return null;
+      if (Date.now() >= claims.exp * 1000) return null;
+      return cached;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  if (!current) return _cachedToken();
+
   return new Promise((resolve) => {
     current.getSession(async (err, session) => {
-      if (err || !session || !session.isValid()) {
-        resolve(null);
+      if (!err && session && session.isValid()) {
+        const claims = session.getIdToken().decodePayload();
+        const expectedIss = `https://${COGNITO_DOMAIN}`;
+        if (claims.iss === expectedIss && claims.aud === COGNITO_CLIENT_ID) {
+          const token = session.getIdToken().getJwtToken();
+          await AsyncStorage.setItem(TOKEN_KEY, token);
+          resolve(token);
+          return;
+        }
+      }
+
+      const cached = await _cachedToken();
+      if (cached) {
+        resolve(cached);
         return;
       }
-      const claims = session.getIdToken().decodePayload();
-      const expectedIss = `https://${COGNITO_DOMAIN}`;
-      if (claims.iss !== expectedIss || claims.aud !== COGNITO_CLIENT_ID) {
-        console.warn('Cognito session does not match current pool, clearing');
-        current.signOut();
-        await AsyncStorage.removeItem(TOKEN_KEY);
-        await AsyncStorage.removeItem(AUTH_KEY);
-        await AsyncStorage.removeItem(LOGIN_TIME_KEY);
-        resolve(null);
-        return;
-      }
-      const token = session.getIdToken().getJwtToken();
-      await AsyncStorage.setItem(TOKEN_KEY, token);
-      resolve(token);
+
+      console.warn('Cognito session invalid, clearing');
+      current?.signOut();
+      await AsyncStorage.removeItem(TOKEN_KEY);
+      await AsyncStorage.removeItem(AUTH_KEY);
+      await AsyncStorage.removeItem(LOGIN_TIME_KEY);
+      resolve(null);
     });
   });
 }
@@ -138,14 +161,39 @@ export function AuthProvider({ children }) {
         return;
       }
 
+      const _userFromCached = async () => {
+        const cached = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
+        if (!cached) return false;
+        try {
+          const idToken = new CognitoIdToken({ IdToken: cached });
+          const claims = idToken.decodePayload();
+          if (!claims) return false;
+          const expectedIss = `https://${COGNITO_DOMAIN}`;
+          if (claims.iss !== expectedIss || claims.aud !== COGNITO_CLIENT_ID) return false;
+          if (Date.now() >= claims.exp * 1000) return false;
+          await _setUserFromClaims(claims, cached);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      };
+
       const current = pool.getCurrentUser();
       if (!current) {
+        if (await _userFromCached()) {
+          setLoading(false);
+          return;
+        }
         setLoading(false);
         return;
       }
 
       current.getSession(async (err, session) => {
         if (err || !session || !session.isValid()) {
+          if (await _userFromCached()) {
+            setLoading(false);
+            return;
+          }
           setLoading(false);
           return;
         }
