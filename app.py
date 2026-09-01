@@ -654,23 +654,28 @@ def api_upload():
             token = auth[7:].strip()
     if not token:
         token = request.values.get("token", "")
+    wants_json = "application/json" in request.headers.get("Accept", "")
+    def _upload_error(message, code=400):
+        if wants_json:
+            return jsonify({"status": "fail", "error": message}), code
+        return render_template_string(UPLOAD_PAGE, token=token, error=message, message=None)
     if request.method == "GET":
         return render_template_string(UPLOAD_PAGE, token=token, error=None, message=None)
 
     if not token:
-        return render_template_string(UPLOAD_PAGE, token=token, error="Missing token", message=None)
+        return _upload_error("Missing token", 401)
 
     if not os.environ.get("DYNAMODB_TABLE"):
-        return render_template_string(UPLOAD_PAGE, token=token, error="DynamoDB not configured", message=None)
+        return _upload_error("DynamoDB not configured", 503)
 
     try:
         from auth import get_user_from_token
         user = get_user_from_token(token)
         if not user:
-            return render_template_string(UPLOAD_PAGE, token=token, error="Invalid or expired token", message=None)
+            return _upload_error("Invalid or expired token", 401)
         user_id = user["user_id"]
     except Exception as e:
-        return render_template_string(UPLOAD_PAGE, token=token, error=f"Token check failed: {e}", message=None)
+        return _upload_error(f"Token check failed: {e}", 500)
 
     total_added = 0
     total_skipped = 0
@@ -689,7 +694,7 @@ def api_upload():
     else:
         uploaded = request.files.getlist("file")
         if not uploaded or any(f.filename == "" for f in uploaded):
-            return _result_html("No file selected", "fail", 400)
+            return _upload_error("No file selected")
         files = [{"name": f.filename, "file": f, "json": False} for f in uploaded]
 
     for file in files:
@@ -724,7 +729,9 @@ def api_upload():
     message = f"Imported {total_added} stocks, skipped {total_skipped}."
     if all_errors:
         message += f" Errors ({len(all_errors)}): {'; '.join(all_errors[:5])}"
-        return render_template_string(UPLOAD_PAGE, token=token, error=message, message=None)
+        return _upload_error(message, 400)
+    if wants_json:
+        return jsonify({"status": "ok", "message": message})
     return _result_html(message, "ok")
 
 

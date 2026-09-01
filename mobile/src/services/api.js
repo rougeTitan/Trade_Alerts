@@ -15,23 +15,13 @@ class ApiService {
     this.baseUrl = baseUrl;
   }
 
-  async uploadUrl() {
-    if (!COGNITO_CONFIGURED) {
-      return `${this.baseUrl}/api/upload`;
-    }
-    const token = await getIdToken();
-    if (!token || token === 'demo-token') {
-      return `${this.baseUrl}/api/upload`;
-    }
-    return `${this.baseUrl}/api/upload?token=${encodeURIComponent(token)}`;
-  }
-
   async _fetch(path, options = {}) {
     const url = `${this.baseUrl}${path}`;
     const body = options.body && typeof options.body === 'string' ? options.body : '';
     const token = await getIdToken();
     const headers = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...options.headers,
     };
     if (token && token !== 'demo-token') {
@@ -64,6 +54,13 @@ class ApiService {
       throw new Error(respBody.error || `Request failed: ${res.status}`);
     }
     return res.json();
+  }
+
+  async bulkImport(fileData) {
+    return this._fetch('/api/upload', {
+      method: 'POST',
+      body: JSON.stringify({ files: fileData }),
+    });
   }
 
   // ── Sectors ──────────────────────────────────────────

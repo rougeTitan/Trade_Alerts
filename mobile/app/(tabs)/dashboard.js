@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
 import { useTheme } from '../../src/theme/ThemeContext';
+import UploadModal from '../../src/components/UploadModal';
 import api from '../../src/services/api';
 import SectorDrawer from '../../src/components/SectorDrawer';
 import StockRow from '../../src/components/StockRow';
@@ -38,6 +38,7 @@ export default function DashboardScreen() {
   const [editModal, setEditModal] = useState({ visible: false, ticker: null, sector: null, targets: [] });
   const [addStockModal, setAddStockModal] = useState(false);
   const [addSectorModal, setAddSectorModal] = useState(false);
+  const [uploadModal, setUploadModal] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -212,6 +213,12 @@ export default function DashboardScreen() {
     loadData(); // reconcile in background
   };
 
+  const handleBulkImport = async (fileData) => {
+    const res = await api.bulkImport(fileData);
+    loadData();
+    return res;
+  };
+
   // Build flat stock list based on active sector
   const sectors = Object.keys(watchlist);
   const visibleSectors = activeSector === '__all__' ? sectors : [activeSector];
@@ -283,10 +290,7 @@ export default function DashboardScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}
-          onPress={async () => {
-            const url = await api.uploadUrl();
-            Linking.openURL(url);
-          }}
+          onPress={() => setUploadModal(true)}
         >
           <Ionicons name="cloud-upload-outline" size={14} color={c.accent} />
           <Text style={[styles.actionBtnTextAlt, { color: c.accent }]}>Upload</Text>
@@ -393,6 +397,12 @@ export default function DashboardScreen() {
         visible={addSectorModal}
         onAdd={handleAddSector}
         onClose={() => setAddSectorModal(false)}
+      />
+
+      <UploadModal
+        visible={uploadModal}
+        onClose={() => setUploadModal(false)}
+        onImport={handleBulkImport}
       />
     </View>
   );
