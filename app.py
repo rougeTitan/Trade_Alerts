@@ -551,42 +551,57 @@ UPLOAD_PAGE = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trade Alerts - Bulk Import</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; background: #0f172a; color: #e2e8f0; }
-    h1 { font-size: 24px; margin-bottom: 8px; }
-    p, li { color: #94a3b8; margin-bottom: 12px; }
-    form { background: #1e293b; padding: 24px; border-radius: 12px; border: 1px solid #334155; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; background: rgba(15, 23, 42, 0.92); color: #e2e8f0; }
+    .modal { background: #1e293b; padding: 32px; border-radius: 16px; border: 1px solid #334155; box-shadow: 0 20px 50px rgba(0,0,0,0.5); max-width: 640px; width: 100%; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    p, li { color: #94a3b8; margin: 0 0 12px; }
+    form { margin-top: 20px; }
     input[type="file"] { color: #e2e8f0; margin-bottom: 20px; }
     button { background: #22c55e; color: #fff; border: none; border-radius: 8px; padding: 12px 20px; font-weight: 600; cursor: pointer; }
     a { color: #22c55e; text-decoration: none; }
     code { background: #334155; padding: 2px 6px; border-radius: 4px; color: #e2e8f0; }
-    pre { background: #1e293b; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; color: #e2e8f0; }
+    pre { background: #0f172a; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; color: #e2e8f0; border: 1px solid #334155; }
     .hint { font-size: 14px; }
+    .banner { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; font-weight: 600; }
+    .banner.error { background: #7f1d1d; color: #fca5a5; }
+    .banner.success { background: #14532d; color: #86efac; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   </style>
 </head>
 <body>
-  <p class="hint"><a href="/dashboard" style="color:#22c55e">← Back to dashboard</a></p>
-  <h1>Bulk Import</h1>
-  <p class="hint">Upload CSV, XLSX, or TradingView TXT files. Each file becomes a sector, each line becomes a stock.</p>
+  <div class="modal">
+    <div class="modal-header">
+      <h1>Bulk Import</h1>
+      <a href="/dashboard" style="font-size:14px">Close</a>
+    </div>
+    {% if error %}
+    <div class="banner error">{{ error }}</div>
+    {% endif %}
+    {% if message %}
+    <div class="banner success">{{ message }}</div>
+    {% endif %}
+    <p class="hint">Upload CSV, XLSX, or TradingView TXT files. Each file becomes a sector, each line becomes a stock.</p>
 
-  <p class="hint">CSV columns (header required):</p>
-  <pre>ticker,sector,current_price,target1,dir1,target2,dir2,target3,dir3</pre>
-  <p class="hint"><code>dir</code> = ABOVE, BELOW or BOTH. Leave blanks for missing targets or current price.</p>
+    <p class="hint">CSV columns (header required):</p>
+    <pre>ticker,sector,current_price,target1,dir1,target2,dir2,target3,dir3</pre>
+    <p class="hint"><code>dir</code> = ABOVE, BELOW or BOTH. Leave blanks for missing targets or current price.</p>
 
-  <p class="hint">Example:</p>
-  <pre>ticker,sector,current_price,target1,dir1,target2,dir2,target3,dir3
+    <p class="hint">Example:</p>
+    <pre>ticker,sector,current_price,target1,dir1,target2,dir2,target3,dir3
 AAPL,Technology,150.00,160.00,ABOVE,140.00,BELOW,,
 MSFT,Technology,250.00,260.00,ABOVE,,,,</pre>
 
-  <p class="hint">TXT format (one file per sector, filename becomes the sector):</p>
-  <pre>NASDAQ:AAPL,NYSE:JPM,NYSE:XOM</pre>
-  <p class="hint">Multiple TXT files can be selected. The exchange prefix (NASDAQ: etc.) is ignored.</p>
+    <p class="hint">TXT format (one file per sector, filename becomes the sector):</p>
+    <pre>NASDAQ:AAPL,NYSE:JPM,NYSE:XOM</pre>
+    <p class="hint">Multiple TXT files can be selected. The exchange prefix (NASDAQ: etc.) is ignored.</p>
 
-  <form onsubmit="return importFiles();">
-    <input type="hidden" id="token-input" name="token" value="{{ token }}" />
-    <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.txt" multiple required />
-    <br />
-    <button type="submit">Import</button>
-  </form>
+    <form onsubmit="return importFiles();">
+      <input type="hidden" id="token-input" name="token" value="{{ token }}" />
+      <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.txt" multiple required />
+      <br />
+      <button type="submit">Import</button>
+    </form>
+  </div>
 
   <script>
     async function importFiles() {
@@ -640,22 +655,22 @@ def api_upload():
     if not token:
         token = request.values.get("token", "")
     if request.method == "GET":
-        return render_template_string(UPLOAD_PAGE, token=token)
+        return render_template_string(UPLOAD_PAGE, token=token, error=None, message=None)
 
     if not token:
-        return _result_html("Missing token", "fail", 401)
+        return render_template_string(UPLOAD_PAGE, token=token, error="Missing token", message=None)
 
     if not os.environ.get("DYNAMODB_TABLE"):
-        return _result_html("DynamoDB not configured", "fail", 503)
+        return render_template_string(UPLOAD_PAGE, token=token, error="DynamoDB not configured", message=None)
 
     try:
         from auth import get_user_from_token
         user = get_user_from_token(token)
         if not user:
-            return _result_html("Invalid or expired token", "fail", 401)
+            return render_template_string(UPLOAD_PAGE, token=token, error="Invalid or expired token", message=None)
         user_id = user["user_id"]
     except Exception as e:
-        return _result_html(f"Token check failed: {e}", "fail", 500)
+        return render_template_string(UPLOAD_PAGE, token=token, error=f"Token check failed: {e}", message=None)
 
     total_added = 0
     total_skipped = 0
@@ -709,19 +724,26 @@ def api_upload():
     message = f"Imported {total_added} stocks, skipped {total_skipped}."
     if all_errors:
         message += f" Errors ({len(all_errors)}): {'; '.join(all_errors[:5])}"
-    return _result_html(message, "ok" if not all_errors else "fail")
+        return render_template_string(UPLOAD_PAGE, token=token, error=message, message=None)
+    return _result_html(message, "ok")
 
 
 def _result_html(message, status, code=200):
     color = "#86efac" if status == "ok" else "#fca5a5"
     bg = "#14532d" if status == "ok" else "#7f1d1d"
     icon = "✅" if status == "ok" else "❌"
+    redirect_script = (
+        '<script>setTimeout(() => { window.location.href = "/dashboard"; }, 1500);</script>'
+        if status == "ok"
+        else ""
+    )
     return f"""<!DOCTYPE html>
-<html><body style="font-family:sans-serif;max-width:640px;margin:40px auto;background:#0f172a;color:#e2e8f0">
-  <div style="background:{bg};color:{color};padding:16px;border-radius:8px;margin-bottom:16px">
-    <h2 style="margin:0">{icon} {message}</h2>
+<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0f172a;color:#e2e8f0">
+  <div style="background:{bg};color:{color};padding:24px;border-radius:12px;max-width:640px;width:100%;margin:20px;text-align:center">
+    <h2 style="margin:0 0 12px">{icon} {message}</h2>
+    <a href="/dashboard" style="color:{color};text-decoration:underline">Dashboard</a>
   </div>
-  <p><a href="/api/upload" style="color:#22c55e">Back</a> | <a href="/dashboard" style="color:#22c55e">Dashboard</a></p>
+  {redirect_script}
 </body></html>""", code
 
 
