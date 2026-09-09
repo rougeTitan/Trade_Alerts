@@ -87,6 +87,7 @@ resource "aws_lambda_function" "web" {
       COGNITO_REGION     = var.region
       COGNITO_POOL_ID    = aws_cognito_user_pool.users.id
       COGNITO_CLIENT_ID  = aws_cognito_user_pool_client.mobile.id
+      DOCUMENTS_BUCKET   = aws_s3_bucket.documents.bucket
     }
   }
 

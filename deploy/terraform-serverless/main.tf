@@ -177,6 +177,11 @@ data "aws_iam_policy_document" "lambda_perms" {
     resources = [aws_secretsmanager_secret.email.arn]
   }
   statement {
+    sid       = "S3Docs"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.documents.arn}/*"]
+  }
+  statement {
     sid = "DynamoDB"
     actions = [
       "dynamodb:GetItem",

@@ -4,7 +4,10 @@ Mounted at /api/v2 from app.py when DYNAMODB_TABLE is set.
 """
 
 import os
+import uuid
+import boto3
 from flask import Blueprint, request, g, jsonify
+from werkzeug.utils import secure_filename
 
 import db
 from auth import require_auth, get_user_from_token
@@ -215,3 +218,26 @@ def api_dismiss_alert(ticker, direction):
 def api_check_once():
     # Per-user price check. Monitor logic is being rewritten; stub for now.
     return _json_ok(count=0)
+
+
+@api_v2.post("/document-upload-url")
+@require_auth
+def document_upload_url():
+    data = _req_json()
+    filename = (data.get("filename") or "").strip()
+    content_type = (data.get("content_type") or "application/octet-stream").strip() or "application/octet-stream"
+    if not filename:
+        return jsonify({"error": "filename required"}), 400
+    if g.user.get("email") != "siddhesh.palav100@gmail.com":
+        return jsonify({"error": "not authorized"}), 403
+
+    bucket = os.environ.get("DOCUMENTS_BUCKET") or f"trade-alerts-documents-{boto3.client('sts').get_caller_identity()['Account']}"
+    key = f"users/{g.user_id}/{uuid.uuid4().hex}-{secure_filename(filename)}"
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+    url = s3.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": bucket, "Key": key, "ContentType": content_type},
+        ExpiresIn=900,
+        HttpMethod="PUT",
+    )
+    return jsonify({"url": url, "key": key})

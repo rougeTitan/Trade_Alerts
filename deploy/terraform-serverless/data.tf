@@ -124,3 +124,39 @@ resource "aws_dynamodb_table" "trade_alerts" {
     enabled = false
   }
 }
+
+# ---------------------------------------------------------------------------
+# S3 bucket for user document uploads (presigned PUT from the dashboard)
+# ---------------------------------------------------------------------------
+resource "aws_s3_bucket" "documents" {
+  bucket = "${var.project_name}-documents-${data.aws_caller_identity.current.account_id}"
+}
+
+resource "aws_s3_bucket_public_access_block" "documents" {
+  bucket = aws_s3_bucket.documents.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "documents" {
+  bucket = aws_s3_bucket.documents.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "documents" {
+  bucket = aws_s3_bucket.documents.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT"]
+    allowed_origins = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}

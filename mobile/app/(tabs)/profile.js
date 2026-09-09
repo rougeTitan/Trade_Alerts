@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/auth/AuthContext';
 import AnimatedToggle from '../../src/components/AnimatedToggle';
+import DocumentUploadModal from '../../src/components/DocumentUploadModal';
 
 const TABS = [
   { key: 'payment', label: 'Payment', icon: 'card-outline' },
@@ -248,6 +249,7 @@ export default function ProfileScreen() {
   const { user, isAuthenticated, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState('payment');
+  const [docModal, setDocModal] = useState(false);
 
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
@@ -303,6 +305,23 @@ export default function ProfileScreen() {
                 <NotificationsTab c={c} isDark={isDark} toggleTheme={toggleTheme} />
               )}
             </View>
+          </>
+        )}
+
+        {isAuthenticated && user?.email === 'siddhesh.palav100@gmail.com' && (
+          <>
+            <TouchableOpacity
+              onPress={() => setDocModal(true)}
+              style={[styles.uploadCard, { backgroundColor: c.surface, borderColor: c.border }]}
+            >
+              <Ionicons name="cloud-upload-outline" size={22} color={c.accent} />
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={[styles.uploadTitle, { color: c.text }]}>Upload Documents</Text>
+                <Text style={[styles.uploadDesc, { color: c.textSecondary }]}>Drop any file to your S3 bucket</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={c.textSecondary} />
+            </TouchableOpacity>
+            <DocumentUploadModal visible={docModal} onClose={() => setDocModal(false)} />
           </>
         )}
 
@@ -477,4 +496,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   logoutText: { fontSize: 14, fontWeight: '600' },
+
+  uploadCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  uploadTitle: { fontSize: 15, fontWeight: '700' },
+  uploadDesc: { fontSize: 13, marginTop: 2 },
 });

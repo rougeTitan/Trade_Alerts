@@ -63,6 +63,13 @@ class ApiService {
     });
   }
 
+  getDocumentUploadUrl(filename, contentType) {
+    return this._fetch(`${USER_PREFIX}/document-upload-url`, {
+      method: 'POST',
+      body: JSON.stringify({ filename, content_type: contentType }),
+    });
+  }
+
   // ── Sectors ──────────────────────────────────────────
 
   addSector(name) {
