@@ -178,8 +178,13 @@ data "aws_iam_policy_document" "lambda_perms" {
   }
   statement {
     sid       = "S3Docs"
-    actions   = ["s3:PutObject"]
+    actions   = ["s3:PutObject", "s3:GetObject"]
     resources = ["${aws_s3_bucket.documents.arn}/*"]
+  }
+  statement {
+    sid       = "S3DocsList"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.documents.arn]
   }
   statement {
     sid = "DynamoDB"

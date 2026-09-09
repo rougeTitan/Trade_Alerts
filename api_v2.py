@@ -241,3 +241,23 @@ def document_upload_url():
         HttpMethod="PUT",
     )
     return jsonify({"url": url, "key": key})
+
+
+@api_v2.get("/documents")
+@require_auth
+def list_documents():
+    bucket = os.environ.get("DOCUMENTS_BUCKET") or f"trade-alerts-documents-{boto3.client('sts').get_caller_identity()['Account']}"
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+    prefix = f"users/{g.user_id}/"
+    resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+    items = []
+    for obj in resp.get("Contents", []):
+        key = obj["Key"]
+        name = key.split("/", 2)[-1] if key.startswith(prefix) else key
+        items.append({
+            "key": key,
+            "name": name,
+            "size": obj["Size"],
+            "last_modified": obj["LastModified"].isoformat(),
+        })
+    return jsonify({"documents": items})
