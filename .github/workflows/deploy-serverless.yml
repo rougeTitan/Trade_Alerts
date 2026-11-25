@@ -121,11 +121,11 @@ jobs:
           echo "IMAGE_TAG=${TAG}" >> "$GITHUB_ENV"
 
           CHECKER="${REGISTRY}/${PROJECT}-lambda:${TAG}"
-          docker build -f deploy/lambda/Dockerfile -t "$CHECKER" .
+          docker build --provenance=false --sbom=false -f deploy/lambda/Dockerfile -t "$CHECKER" .
           docker push "$CHECKER"
 
           WEB="${REGISTRY}/${PROJECT}-web:${TAG}"
-          docker build -f deploy/lambda-web/Dockerfile -t "$WEB" .
+          docker build --provenance=false --sbom=false -f deploy/lambda-web/Dockerfile -t "$WEB" .
           docker push "$WEB"
 
       - name: Adopt pre-existing resources into state (idempotent)
