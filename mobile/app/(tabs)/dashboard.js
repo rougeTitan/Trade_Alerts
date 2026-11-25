@@ -29,6 +29,7 @@ export default function DashboardScreen() {
   const [watchlist, setWatchlist] = useState({});
   const [suggestions, setSuggestions] = useState({}); // { TICKER: [{price, direction}, ...] }
   const [calculatingTargets, setCalculatingTargets] = useState(false);
+  const [checkingAlerts, setCheckingAlerts] = useState(false);
   const [activeSector, setActiveSector] = useState('__all__');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -228,14 +229,18 @@ export default function DashboardScreen() {
   };
 
   const handleCheckOnce = async () => {
+    if (checkingAlerts) return;
+    setCheckingAlerts(true);
     try {
       const { count } = await api.checkOnce();
-      await loadData();
       if (count > 0) {
         router.push('/(tabs)/alerts');
       }
+      loadData(); // refresh in background; don't block navigation
     } catch (e) {
       console.warn('Check once failed:', e.message);
+    } finally {
+      setCheckingAlerts(false);
     }
   };
 
@@ -422,9 +427,16 @@ export default function DashboardScreen() {
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}
           onPress={handleCheckOnce}
+          disabled={checkingAlerts}
         >
-          <Ionicons name="flash-outline" size={14} color={c.text} />
-          <Text style={[styles.actionBtnTextAlt, { color: c.text }]}>Check Alerts</Text>
+          {checkingAlerts ? (
+            <ActivityIndicator size="small" color={c.text} />
+          ) : (
+            <Ionicons name="flash-outline" size={14} color={c.text} />
+          )}
+          <Text style={[styles.actionBtnTextAlt, { color: c.text }]}>
+            {checkingAlerts ? 'Checking...' : 'Check Alerts'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: c.surface2, borderColor: c.border, borderWidth: 1 }]}

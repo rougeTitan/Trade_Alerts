@@ -349,6 +349,13 @@ export default function AlertsScreen() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <View style={styles.headerLeftGroup}>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/dashboard')}
+            style={styles.backBtn}
+            accessibilityLabel="Back to dashboard"
+          >
+            <Ionicons name="arrow-back" size={20} color={c.text} />
+          </TouchableOpacity>
           <View style={[styles.bellWrap, { backgroundColor: c.accent + '18' }]}>
             <Ionicons name="notifications" size={18} color={c.accent} />
           </View>
@@ -460,6 +467,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
   },
+  backBtn: { padding: 4 },
   headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   bellWrap: {
     width: 36,
