@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '../../src/theme/ThemeContext';
 import UploadModal from '../../src/components/UploadModal';
 import api from '../../src/services/api';
@@ -27,6 +27,7 @@ export default function DashboardScreen() {
   const c = theme.colors;
 
   const [watchlist, setWatchlist] = useState({});
+  const [suggestions, setSuggestions] = useState({}); // { TICKER: [{price, direction}, ...] }
   const [activeSector, setActiveSector] = useState('__all__');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,13 +41,26 @@ export default function DashboardScreen() {
   const [addSectorModal, setAddSectorModal] = useState(false);
   const [uploadModal, setUploadModal] = useState(false);
 
+  // Incremented whenever the user edits data. Any server response that was
+  // requested before the latest edit is stale and must not overwrite state.
+  const editEpoch = useRef(0);
+  const markEdited = () => {
+    editEpoch.current += 1;
+  };
+  const watchlistRef = useRef(watchlist);
+  watchlistRef.current = watchlist;
+  const applyIfFresh = (epochAtStart, wl) => {
+    if (epochAtStart === editEpoch.current) setWatchlist(wl);
+  };
+
   const loadData = useCallback(async () => {
+    const epoch = editEpoch.current;
     try {
       const [wl, status] = await Promise.all([
         api.getWatchlist(),
         api.getMonitorStatus(),
       ]);
-      setWatchlist(wl);
+      applyIfFresh(epoch, wl);
       setMonitorRunning(status.running);
     } catch (e) {
       console.warn('Failed to load data:', e.message);
@@ -56,16 +70,21 @@ export default function DashboardScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // Reload on mount and whenever the screen regains focus (e.g. returning
+  // from Bulk Edit).
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   // Auto-refresh prices on first mount
   useEffect(() => {
     const autoRefresh = async () => {
+      const epoch = editEpoch.current;
       try {
         const updatedWatchlist = await api.refreshPrices();
-        setWatchlist(updatedWatchlist);
+        applyIfFresh(epoch, updatedWatchlist);
       } catch (e) {
         console.warn('Auto price refresh failed:', e.message);
       }
@@ -73,11 +92,87 @@ export default function DashboardScreen() {
     autoRefresh();
   }, []);
 
+  // Stable key for the current set of tickers (ignores price changes).
+  const tickerSetKey = Object.keys(watchlist)
+    .map((s) => (watchlist[s] || []).map((x) => x.ticker).join(','))
+    .join('|');
+
+  // Auto-compute suggested targets for every stock whenever the ticker set
+  // changes. Non-blocking: cards render immediately, suggestions fill in when
+  // the batch returns (cached server-side after the first call).
+  useEffect(() => {
+    const tickers = [];
+    for (const s of Object.keys(watchlist)) {
+      for (const st of watchlist[s] || []) if (st.ticker) tickers.push(st.ticker);
+    }
+    if (tickers.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getSuggestedTargets(tickers);
+        if (cancelled) return;
+        const map = {};
+        for (const [sym, payload] of Object.entries(res.results || {})) {
+          if (payload && !payload.error && Array.isArray(payload.targets) && payload.targets.length) {
+            map[sym] = payload.targets.map((t) => ({ price: t.price, direction: t.direction }));
+          }
+        }
+        setSuggestions(map);
+
+        // Auto-targets: stocks with no saved targets (or previously auto-filled
+        // ones) get the suggested levels persisted so alerts use them. Custom
+        // user targets are never overwritten.
+        const samePrices = (a, b) =>
+          a.length === b.length &&
+          a.every((t, i) => Math.abs(t.price - b[i].price) < 0.005 && t.direction === b[i].direction);
+        const updates = [];
+        for (const [sector, stocks] of Object.entries(watchlistRef.current)) {
+          for (const st of stocks || []) {
+            const sugg = map[st.ticker];
+            if (!sugg) continue;
+            const saved = (st.targets || []).filter((t) => t && t.price != null);
+            const isAuto = st.targets_source === 'auto';
+            if (saved.length && !isAuto) continue;
+            if (saved.length && samePrices(saved, sugg)) continue;
+            updates.push({ sector, ticker: st.ticker, targets: sugg });
+          }
+        }
+        if (updates.length) {
+          markEdited();
+          setWatchlist((prev) => {
+            const next = { ...prev };
+            for (const u of updates) {
+              next[u.sector] = (next[u.sector] || []).map((s) =>
+                s.ticker === u.ticker ? { ...s, targets: u.targets, targets_source: 'auto' } : s
+              );
+            }
+            return next;
+          });
+          for (const u of updates) {
+            try {
+              await api.setTargets(u.ticker, u.sector, u.targets, 'auto');
+            } catch (e) {
+              console.warn('Auto-target save failed:', u.ticker, e.message);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Suggested targets failed:', e.message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickerSetKey]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    const epoch = editEpoch.current;
     try {
       const updatedWatchlist = await api.refreshPrices();
-      setWatchlist(updatedWatchlist);
+      applyIfFresh(epoch, updatedWatchlist);
       const status = await api.getMonitorStatus();
       setMonitorRunning(status.running);
     } catch (e) {
@@ -91,9 +186,10 @@ export default function DashboardScreen() {
     if (refreshingPrices) return;
     
     setRefreshingPrices(true);
+    const epoch = editEpoch.current;
     try {
       const updatedWatchlist = await api.refreshPrices();
-      setWatchlist(updatedWatchlist);
+      applyIfFresh(epoch, updatedWatchlist);
     } catch (e) {
       console.warn('Price refresh failed:', e.message);
     } finally {
@@ -130,27 +226,37 @@ export default function DashboardScreen() {
   const handleEditTargets = (ticker, sector) => {
     const stocks = watchlist[sector] || [];
     const stock = stocks.find((s) => s.ticker === ticker);
-    setEditModal({
-      visible: true,
-      ticker,
-      sector,
-      targets: stock?.targets || [],
-    });
+    const savedValid = (stock?.targets || []).filter((t) => t && t.price != null);
+    // Prefill saved targets if any; otherwise seed the modal with the
+    // auto-suggested ones so the user can tweak and Save to persist.
+    const prefill = savedValid.length ? stock.targets : (suggestions[ticker] || []);
+    setEditModal({ visible: true, ticker, sector, targets: prefill });
   };
 
   const handleSaveTargets = async (ticker, sector, targets) => {
+    const previous = watchlist;
+    markEdited();
+    setWatchlist((prev) => ({
+      ...prev,
+      [sector]: (prev[sector] || []).map((s) =>
+        s.ticker === ticker ? { ...s, targets, targets_source: 'custom' } : s
+      ),
+    }));
+    setEditModal({ visible: false, ticker: null, sector: null, targets: [] });
     try {
       await api.setTargets(ticker, sector, targets);
-      setEditModal({ visible: false, ticker: null, sector: null, targets: [] });
-      loadData();
     } catch (e) {
       console.warn('Save targets failed:', e.message);
+      setWatchlist(previous);
     }
+    markEdited();
+    loadData();
   };
 
   const handleAddStock = async (sector, ticker) => {
     setAddStockModal(false);
     const tk = (ticker || '').trim().toUpperCase();
+    markEdited();
     // Optimistic: show the new card immediately (price/earnings fill in on reconcile).
     setWatchlist((prev) => {
       const existing = prev[sector] || [];
@@ -165,10 +271,20 @@ export default function DashboardScreen() {
     } catch (e) {
       console.warn('Add stock failed:', e.message);
     }
+    markEdited();
     loadData(); // reconcile in background
+    // New stocks have no price until prices are refreshed.
+    const epoch = editEpoch.current;
+    try {
+      const updated = await api.refreshPrices();
+      applyIfFresh(epoch, updated);
+    } catch (e) {
+      console.warn('Price refresh after add failed:', e.message);
+    }
   };
 
   const handleRemoveStock = async (ticker, sector) => {
+    markEdited();
     // Optimistic: remove the card immediately.
     setWatchlist((prev) => ({
       ...prev,
@@ -179,6 +295,7 @@ export default function DashboardScreen() {
     } catch (e) {
       console.warn('Remove stock failed:', e.message);
     }
+    markEdited();
     loadData(); // reconcile in background
   };
 
@@ -186,16 +303,19 @@ export default function DashboardScreen() {
     setAddSectorModal(false);
     // Optimistic: show the new (empty) sector immediately; getWatchlist is slow
     // because it fetches earnings dates for every ticker.
+    markEdited();
     setWatchlist((prev) => (prev[name] ? prev : { ...prev, [name]: [] }));
     try {
       await api.addSector(name);
     } catch (e) {
       console.warn('Add sector failed:', e.message);
     }
+    markEdited();
     loadData(); // reconcile in background
   };
 
   const handleDeleteSector = async (name) => {
+    markEdited();
     // Optimistic: drop the sector from local state right away.
     setWatchlist((prev) => {
       const next = { ...prev };
@@ -210,11 +330,13 @@ export default function DashboardScreen() {
     } catch (e) {
       console.warn('Delete sector failed:', e.message);
     }
+    markEdited();
     loadData(); // reconcile in background
   };
 
   const handleBulkImport = async (fileData) => {
     const res = await api.bulkImport(fileData);
+    markEdited();
     loadData();
     return res;
   };
@@ -350,6 +472,8 @@ export default function DashboardScreen() {
                 ticker={stock.ticker}
                 price={stock.current_price}
                 targets={stock.targets || []}
+                suggestedTargets={suggestions[stock.ticker] || []}
+                targetsSource={stock.targets_source}
                 sector={stock.sector}
                 earningsDate={stock.earnings_date}
                 onEdit={() => handleEditTargets(stock.ticker, stock.sector)}

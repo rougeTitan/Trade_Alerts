@@ -8,6 +8,15 @@ trade-alerts-deploy.zip
 watchlist_SAMPLE.xlsx
 check_watchlist.py
 
+# Market-data dev cache (SQLite)
+market_data.db
+market_data.db-journal
+_capture.py
+docs_example_*.json
+
+# pytest
+.pytest_cache/
+
 # Python
 __pycache__/
 *.pyc

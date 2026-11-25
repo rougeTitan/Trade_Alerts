@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
-export default function TargetPill({ price, direction }) {
+export default function TargetPill({ price, direction, suggested = false }) {
   const { theme } = useTheme();
   const c = theme.colors;
 
@@ -27,8 +27,14 @@ export default function TargetPill({ price, direction }) {
   }
 
   return (
-    <View style={[styles.pill, { backgroundColor: bg, borderColor: border }]}>
-      <Text style={[styles.text, { color }]}>
+    <View
+      style={[
+        styles.pill,
+        { backgroundColor: suggested ? 'transparent' : bg, borderColor: border },
+        suggested && styles.suggested,
+      ]}
+    >
+      <Text style={[styles.text, { color }, suggested && styles.suggestedText]}>
         ${price.toFixed(2)} {arrow}
       </Text>
     </View>
@@ -41,6 +47,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 14,
     borderWidth: 1,
+  },
+  suggested: {
+    borderStyle: 'dashed',
+    opacity: 0.75,
+  },
+  suggestedText: {
+    fontWeight: '600',
   },
   text: {
     fontSize: 12,

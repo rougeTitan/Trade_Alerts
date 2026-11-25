@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import TargetPill from './TargetPill';
 
-export default function StockRow({ ticker, price, targets, sector, earningsDate, onEdit, onRemove }) {
+export default function StockRow({ ticker, price, targets, suggestedTargets, targetsSource, sector, earningsDate, onEdit, onRemove }) {
   const { theme } = useTheme();
   const c = theme.colors;
   const { width: screenWidth } = useWindowDimensions();
@@ -18,7 +18,17 @@ export default function StockRow({ ticker, price, targets, sector, earningsDate,
   const priceStr = price != null ? `$${price.toFixed(2)}` : '—';
 
   // Filter out empty target slots before rendering
-  const validTargets = (targets || []).filter((t) => t && t.price != null);
+  const savedTargets = (targets || []).filter((t) => t && t.price != null);
+  const suggested = (suggestedTargets || []).filter((t) => t && t.price != null);
+  // Show saved targets when present; otherwise fall back to auto-suggestions
+  // (clearly labelled, dashed) that the user can persist via Edit Targets.
+  const showingSuggested = savedTargets.length === 0 && suggested.length > 0;
+  const validTargets = savedTargets.length ? savedTargets : suggested;
+  const isAuto = savedTargets.length > 0 && targetsSource === 'auto';
+  const differsFromSuggested =
+    savedTargets.length > 0 && !isAuto && suggested.length > 0 &&
+    (savedTargets.length !== suggested.length ||
+      savedTargets.some((t, i) => Math.abs(t.price - suggested[i].price) >= 0.005));
 
   // Format earnings date
   const formatEarningsDate = (dateStr) => {
@@ -86,13 +96,36 @@ export default function StockRow({ ticker, price, targets, sector, earningsDate,
       </View>
 
       {/* Targets */}
+      {showingSuggested && (
+        <View style={styles.suggestedTag}>
+          <Ionicons name="sparkles-outline" size={9} color={c.textSecondary} />
+          <Text style={[styles.suggestedTagText, { color: c.textSecondary }]}>
+            Suggested — tap Edit to save
+          </Text>
+        </View>
+      )}
+      {isAuto && (
+        <View style={styles.suggestedTag}>
+          <Ionicons name="sparkles-outline" size={9} color={c.accent} />
+          <Text style={[styles.suggestedTagText, { color: c.accent }]}>
+            Auto levels — alerts active
+          </Text>
+        </View>
+      )}
       <View style={styles.targetsRow}>
         {validTargets.length === 0 ? (
           <Text style={[styles.noTargets, { color: c.textSecondary }]}>No targets set</Text>
         ) : (
-          validTargets.map((t, i) => <TargetPill key={i} price={t.price} direction={t.direction} />)
+          validTargets.map((t, i) => (
+            <TargetPill key={i} price={t.price} direction={t.direction} suggested={showingSuggested} />
+          ))
         )}
       </View>
+      {differsFromSuggested && (
+        <Text style={[styles.suggestedTagText, { color: c.textSecondary, marginTop: 4 }]}>
+          Auto suggests: {suggested.map((t) => `$${Number(t.price).toFixed(2)}`).join(' · ')}
+        </Text>
+      )}
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -145,6 +178,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   noTargets: { fontSize: 11, fontStyle: 'italic' },
+  suggestedTag: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 },
+  suggestedTagText: { fontSize: 9, fontWeight: '600', fontStyle: 'italic', letterSpacing: 0.2 },
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-between',

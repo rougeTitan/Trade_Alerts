@@ -73,7 +73,8 @@ class ApiService {
   // ── Sectors ──────────────────────────────────────────
 
   addSector(name) {
-    return this._fetch(`${USER_PREFIX}/sectors`, {
+    const path = COGNITO_CONFIGURED ? `${USER_PREFIX}/sectors` : '/api/sectors/add';
+    return this._fetch(path, {
       method: 'POST',
       body: JSON.stringify({ sector: name }),
     });
@@ -88,17 +89,18 @@ class ApiService {
   // ── Stocks ───────────────────────────────────────────
 
   addStock(sector, ticker) {
-    return this._fetch(`${USER_PREFIX}/stocks`, {
+    const path = COGNITO_CONFIGURED ? `${USER_PREFIX}/stocks` : '/api/sectors/stock';
+    return this._fetch(path, {
       method: 'POST',
       body: JSON.stringify({ sector, ticker }),
     });
   }
 
   removeStock(sector, ticker) {
-    return this._fetch(
-      `${USER_PREFIX}/stocks/${encodeURIComponent(sector)}/${encodeURIComponent(ticker)}`,
-      { method: 'DELETE' }
-    );
+    const path = COGNITO_CONFIGURED
+      ? `${USER_PREFIX}/stocks/${encodeURIComponent(sector)}/${encodeURIComponent(ticker)}`
+      : `/api/sectors/${encodeURIComponent(sector)}/stock/${encodeURIComponent(ticker)}`;
+    return this._fetch(path, { method: 'DELETE' });
   }
 
   // ── Watchlist ────────────────────────────────────────
@@ -109,10 +111,10 @@ class ApiService {
 
   // ── Targets ──────────────────────────────────────────
 
-  setTargets(ticker, sector, targets) {
+  setTargets(ticker, sector, targets, source = 'custom') {
     return this._fetch(`${USER_PREFIX}/targets`, {
       method: 'POST',
-      body: JSON.stringify({ ticker, sector, targets }),
+      body: JSON.stringify({ ticker, sector, targets, source }),
     });
   }
 
@@ -120,6 +122,21 @@ class ApiService {
 
   refreshPrices() {
     return this._fetch(`${USER_PREFIX}/prices/refresh`);
+  }
+
+  // ── Suggested targets (historical price-zone algorithm, read-only) ──
+  // Not persisted — these are suggestions shown on the card until the user
+  // saves them via setTargets. The market-data endpoints live outside the
+  // user API prefix and ignore auth.
+
+  getSuggestedTargets(symbols, { lookbackYears = 5, refresh = false } = {}) {
+    const list = (symbols || [])
+      .filter(Boolean)
+      .map((s) => encodeURIComponent(s))
+      .join(',');
+    let path = `/api/market-data/targets/suggest-batch?symbols=${list}&lookback_years=${lookbackYears}`;
+    if (refresh) path += '&refresh=true';
+    return this._fetch(path);
   }
 
   // ── Alerts ───────────────────────────────────────────

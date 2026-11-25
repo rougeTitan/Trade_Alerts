@@ -83,7 +83,7 @@ def _ensure_watchlist():
             create_watchlist_template(sectors, wl_path)
 
 
-def _set_targets(ticker: str, sector: str, targets: list):
+def _set_targets(ticker: str, sector: str, targets: list, source: str = "custom"):
     """
     Write price targets for *ticker* into the watchlist Excel.
 
@@ -115,6 +115,10 @@ def _set_targets(ticker: str, sector: str, targets: list):
                     price_col, dir_col = col_pairs[i]
                     ws[f"{price_col}{row}"] = t["price"]
                     ws[f"{dir_col}{row}"] = t.get("direction", "BOTH")
+                if source == "auto":
+                    ws[f"J{row}"] = "auto"
+                elif ws[f"J{row}"].value == "auto":
+                    ws[f"J{row}"] = None
                 saved = True
                 break
         if saved:
@@ -122,6 +126,23 @@ def _set_targets(ticker: str, sector: str, targets: list):
 
     wb.save(wl_path)
     wb.close()
+
+
+def _read_auto_flags(wl_path: str) -> set:
+    flags = set()
+    if not os.path.exists(wl_path):
+        return flags
+    wb = openpyxl.load_workbook(wl_path, data_only=True)
+    for sn in wb.sheetnames:
+        if sn == "Summary":
+            continue
+        ws = wb[sn]
+        for row in range(2, ws.max_row + 1):
+            t = ws[f"A{row}"].value
+            if t and ws[f"J{row}"].value == "auto":
+                flags.add(str(t).strip().upper())
+    wb.close()
+    return flags
 
 
 def _add_ticker_to_excel(ticker: str, sector: str):
@@ -316,6 +337,7 @@ def api_get_watchlist():
 
     # Also read current prices from the Excel
     prices = {}
+    auto_flags = set()
     if os.path.exists(wl_path):
         wb = openpyxl.load_workbook(wl_path, data_only=True)
         for sn in wb.sheetnames:
@@ -325,6 +347,8 @@ def api_get_watchlist():
             for row in range(2, ws.max_row + 1):
                 t = ws[f"A{row}"].value
                 p = ws[f"C{row}"].value
+                if t and ws[f"J{row}"].value == "auto":
+                    auto_flags.add(str(t).strip().upper())
                 if t:
                     try:
                         prices[str(t).strip().upper()] = float(p) if p else None
@@ -349,6 +373,7 @@ def api_get_watchlist():
                 "ticker": tk,
                 "current_price": prices.get(tk),
                 "targets": info.get("targets", []),
+                "targets_source": "auto" if tk.upper() in auto_flags else "custom",
                 "earnings_date": earnings.get(tk),
             })
     return jsonify(result)
@@ -379,7 +404,8 @@ def api_set_targets():
         except (KeyError, ValueError, TypeError):
             continue
 
-    _set_targets(ticker, sector, clean)
+    source = "auto" if str(data.get("source", "custom")).lower() == "auto" else "custom"
+    _set_targets(ticker, sector, clean, source)
     return jsonify({"ok": True, "saved": len(clean)})
 
 
@@ -410,6 +436,7 @@ def api_refresh_prices():
         items = []
     
     target_map = {item["ticker"]: item for item in items}
+    auto_flags = _read_auto_flags(wl_path)
     
     result = {}
     for sector, tickers in sectors.items():
@@ -420,6 +447,7 @@ def api_refresh_prices():
                 "ticker": tk,
                 "current_price": prices.get(tk),
                 "targets": info.get("targets", []),
+                "targets_source": "auto" if tk.upper() in auto_flags else "custom",
                 "earnings_date": earnings.get(tk),
             })
     
@@ -918,6 +946,15 @@ if os.environ.get("AUTO_START_MONITOR", "1") == "1":
 if os.environ.get("DYNAMODB_TABLE"):
     from api_v2 import api_v2
     app.register_blueprint(api_v2, url_prefix="/api/v2")
+
+
+# Backend-only market-data + target-preview feature (Phase 1/2).
+# Read-only: never writes targets, never sends email. Always available.
+try:
+    from market_data.routes import market_data_bp
+    app.register_blueprint(market_data_bp)
+except ImportError as _md_err:
+    print(f"market_data disabled: {_md_err}")
 
 
 if __name__ == "__main__":
