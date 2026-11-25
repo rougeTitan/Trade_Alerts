@@ -2,14 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
-export default function SummaryCards({ totalStocks, withTargets, noTargets, sectors }) {
+export default function SummaryCards({ totalStocks, withTargets, noTargets, sectors, calculating = false }) {
   const { theme } = useTheme();
   const c = theme.colors;
 
   const cards = [
     { label: 'Stocks', value: totalStocks, color: c.accent },
-    { label: 'With Targets', value: withTargets, color: c.green },
-    { label: 'No Targets', value: noTargets, color: c.red },
+    { label: 'With Targets', value: calculating ? '…' : withTargets, color: c.green },
+    { label: 'No Targets', value: calculating ? '…' : noTargets, color: c.red },
     { label: 'Sectors', value: sectors, color: c.accent },
   ];
 

@@ -28,6 +28,7 @@ export default function DashboardScreen() {
 
   const [watchlist, setWatchlist] = useState({});
   const [suggestions, setSuggestions] = useState({}); // { TICKER: [{price, direction}, ...] }
+  const [calculatingTargets, setCalculatingTargets] = useState(false);
   const [activeSector, setActiveSector] = useState('__all__');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -108,6 +109,7 @@ export default function DashboardScreen() {
     if (tickers.length === 0) return;
 
     let cancelled = false;
+    setCalculatingTargets(true);
     const CHUNK = 10;
     const samePrices = (a, b) =>
       a.length === b.length &&
@@ -171,8 +173,9 @@ export default function DashboardScreen() {
         if (cancelled) return;
         const ok = await processChunk(tickers.slice(i, i + CHUNK));
         // Endpoint missing/unavailable: stop instead of repeating the error.
-        if (!ok) return;
+        if (!ok) break;
       }
+      if (!cancelled) setCalculatingTargets(false);
     })();
     return () => {
       cancelled = true;
@@ -460,6 +463,7 @@ export default function DashboardScreen() {
         withTargets={withTargets}
         noTargets={noTargets}
         sectors={sectors.length}
+        calculating={calculatingTargets}
       />
 
       {/* Stock Grid */}
