@@ -165,13 +165,17 @@ def remove_stock(user_id, sector, ticker):
     _decr_ticker(ticker)
 
 
-def set_targets(user_id, sector, ticker, targets):
+def set_targets(user_id, sector, ticker, targets, source="custom"):
     table = _get_table()
     clean = _clean_targets(targets)
     table.update_item(
         Key={"PK": f"USER#{user_id}", "SK": f"STOCK#{sector}#{ticker.upper()}"},
-        UpdateExpression="SET targets = :t, updatedAt = :u",
-        ExpressionAttributeValues={":t": clean, ":u": _now()},
+        UpdateExpression="SET targets = :t, updatedAt = :u, targetsSource = :s",
+        ExpressionAttributeValues={
+            ":t": clean,
+            ":u": _now(),
+            ":s": "auto" if source == "auto" else "custom",
+        },
     )
 
 
@@ -242,6 +246,7 @@ def get_watchlist(user_id):
                 "ticker": i.get("ticker"),
                 "current_price": float(i.get("currentPrice", 0) or 0),
                 "targets": i.get("targets", [None, None, None]),
+                "targets_source": i.get("targetsSource", "custom"),
                 "earnings_date": i.get("earningsDate"),
             })
     # Return ordered empty list for every known sector for dashboard.

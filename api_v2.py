@@ -153,7 +153,8 @@ def api_set_targets():
         return jsonify({"error": "ticker and sector required"}), 400
     if not db.get_stock(g.user_id, sector, ticker):
         return jsonify({"error": "stock not found"}), 404
-    db.set_targets(g.user_id, sector, ticker, targets)
+    source = "auto" if str(data.get("source", "custom")).lower() == "auto" else "custom"
+    db.set_targets(g.user_id, sector, ticker, targets, source)
     return _json_ok()
 
 

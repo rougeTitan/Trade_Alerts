@@ -9,6 +9,10 @@ RUN pip install --no-cache-dir -r requirements-web.txt
 # Flask app + supporting modules.
 COPY app.py api_v2.py auth.py db.py price_fetcher.py monitor.py notifier.py excel_manager.py ./
 COPY templates ./templates
+COPY market_data ./market_data
+
+# Lambda's only writable path is /tmp (bar cache is rebuilt on cold start).
+ENV MARKET_DATA_DB=/tmp/market_data.db
 
 # Lambda entrypoint (wraps app.py).
 COPY deploy/lambda-web/lambda_web.py ./

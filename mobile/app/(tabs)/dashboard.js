@@ -108,9 +108,14 @@ export default function DashboardScreen() {
     if (tickers.length === 0) return;
 
     let cancelled = false;
-    (async () => {
+    const CHUNK = 10;
+    const samePrices = (a, b) =>
+      a.length === b.length &&
+      a.every((t, i) => Math.abs(t.price - b[i].price) < 0.005 && t.direction === b[i].direction);
+
+    const processChunk = async (chunk) => {
       try {
-        const res = await api.getSuggestedTargets(tickers);
+        const res = await api.getSuggestedTargets(chunk);
         if (cancelled) return;
         const map = {};
         for (const [sym, payload] of Object.entries(res.results || {})) {
@@ -118,14 +123,11 @@ export default function DashboardScreen() {
             map[sym] = payload.targets.map((t) => ({ price: t.price, direction: t.direction }));
           }
         }
-        setSuggestions(map);
+        setSuggestions((prev) => ({ ...prev, ...map }));
 
         // Auto-targets: stocks with no saved targets (or previously auto-filled
         // ones) get the suggested levels persisted so alerts use them. Custom
         // user targets are never overwritten.
-        const samePrices = (a, b) =>
-          a.length === b.length &&
-          a.every((t, i) => Math.abs(t.price - b[i].price) < 0.005 && t.direction === b[i].direction);
         const updates = [];
         for (const [sector, stocks] of Object.entries(watchlistRef.current)) {
           for (const st of stocks || []) {
@@ -159,6 +161,17 @@ export default function DashboardScreen() {
         }
       } catch (e) {
         console.warn('Suggested targets failed:', e.message);
+        return false;
+      }
+      return true;
+    };
+
+    (async () => {
+      for (let i = 0; i < tickers.length; i += CHUNK) {
+        if (cancelled) return;
+        const ok = await processChunk(tickers.slice(i, i + CHUNK));
+        // Endpoint missing/unavailable: stop instead of repeating the error.
+        if (!ok) return;
       }
     })();
     return () => {

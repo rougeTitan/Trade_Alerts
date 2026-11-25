@@ -19,6 +19,7 @@ locals {
     filesha1("${path.module}/${var.repo_root}/notifier.py"),
     filesha1("${path.module}/${var.repo_root}/price_fetcher.py"),
     filesha1("${path.module}/${var.repo_root}/excel_manager.py"),
+    join("", [for f in sort(fileset("${path.module}/${var.repo_root}/market_data", "*.py")) : filesha1("${path.module}/${var.repo_root}/market_data/${f}")]),
   ]))
   web_image_tag = var.web_image_tag_override != "" ? var.web_image_tag_override : substr(local.web_src_hash, 0, 12)
   web_repo_url  = aws_ecr_repository.web.repository_url
